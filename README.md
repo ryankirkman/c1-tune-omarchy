@@ -287,6 +287,9 @@ directories above.
 
 - **Tested on one camera**: an IMX378 Opal C1 on one Omarchy machine. The IMX582 revision's
   tuning is picked automatically but untested.
+- **Sleep and wake was tested once** (30 s of deep sleep, with the camera on a hub that kept
+  its power): the wake was noticed and video, microphone and controls carried on. A camera
+  that loses power while asleep comes back through the plug-in path instead.
 - **English only.** The panel's strings are marked for translation but no catalogs ship yet.
 - **No live readout of auto values**, and **zoom restarts the camera**, as on macOS.
 - **The microphone can't be hidden**, and its gain is fixed, as on macOS. Its firmware can be
