@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/">
+        <file>Main.qml</file>
+        <file>SliderRow.qml</file>
+        <file>SectionHeader.qml</file>
+        <file>CameraPreview.qml</file>
+    </qresource>
+</RCC>

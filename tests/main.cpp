@@ -1,6 +1,6 @@
 // Protocol tests: `make test`. Compares the encoders with reference bytes produced by
-// compiling DepthAI's own headers (tests/fixtures, shared with C1 Tune for macOS) and with
-// bytes captured from the macOS app's encoders (tests/fixtures/mac), then checks the settings
+// compiling DepthAI's own headers (tests/fixtures, shared with C1 Tune for macOS),
+// then checks the settings
 // logic. No camera needed. C1TUNE_TEST_DOWNLOAD=1 also checks the firmware download.
 
 #include <cstdio>

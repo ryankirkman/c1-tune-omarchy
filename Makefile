@@ -18,7 +18,7 @@ build/c1-tune: $(DAEMON) $(HEADERS) Makefile
 
 build/c1-tune-panel: $(wildcard panel/*) Makefile
 	@mkdir -p build/panel
-	cd build/panel && qmake6 ../../panel/panel.pro "VERSION_STRING=$(VERSION) ($(COMMIT))" && $(MAKE) -s
+	cd build/panel && qmake6 ../../panel/panel.pro PANEL_VERSION=$(VERSION) && $(MAKE) -s
 	cp build/panel/c1-tune-panel $@
 
 # Protocol tests: encoders vs reference bytes. No camera needed.
