@@ -348,6 +348,12 @@ void Session::connect(bool secondTry) {
         Error error;
         auto existing = XLinkConnection::connect(OpalPID::booted, error, 3, logDevice, onDeath);
         if (!existing && error == Error::noAnswer) existing = XLinkConnection::connect(OpalPID::booted, error, 3, logDevice, onDeath);
+        // A camera that is on its way out (just told to reboot) also refuses the claim for a
+        // moment. Only call it "in use by another app" if it stays that way.
+        for (int i = 0; i < 6 && !existing && error == Error::busy && bootedPresent(); i++) {
+            sleepFor(0.25);
+            existing = XLinkConnection::connect(OpalPID::booted, error, 3, logDevice, onDeath);
+        }
         if (existing) {
             try {
                 attach(std::move(existing), false);

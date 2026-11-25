@@ -29,6 +29,13 @@ build/tests: $(CORE) tests/main.cpp $(HEADERS) Makefile
 	@mkdir -p build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE) tests/main.cpp -o $@
 
+# The pointer tool for clicking through the UI for real (see tests/ui/ui.sh).
+build/ptr: tests/ui/ptr.c tests/ui/wlr-virtual-pointer-unstable-v1.xml
+	@mkdir -p build/vp
+	wayland-scanner client-header tests/ui/wlr-virtual-pointer-unstable-v1.xml build/vp/vp.h
+	wayland-scanner private-code tests/ui/wlr-virtual-pointer-unstable-v1.xml build/vp/vp.c
+	$(CC) -O1 -Ibuild/vp -o $@ tests/ui/ptr.c build/vp/vp.c -lwayland-client
+
 # Builds the Arch package and installs it (binary, panel, launcher entry, icon, udev rule).
 install:
 	cd pkgbuild && makepkg -fsi

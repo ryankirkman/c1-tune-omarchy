@@ -41,6 +41,22 @@ std::string socketPath() {
     return (runtime && *runtime ? std::string(runtime) : "/tmp") + "/c1-tune.sock";
 }
 
+/// Where the app leaves its status for the bar button: one line, "kind<TAB>message". The
+/// button watches the file, so it follows the camera without asking anybody anything.
+std::string statePath() {
+    const char *runtime = getenv("XDG_RUNTIME_DIR");
+    return (runtime && *runtime ? std::string(runtime) : "/tmp") + "/c1-tune.state";
+}
+
+void writeState(const std::string &kind, const std::string &message) {
+    // Written in place, not renamed over: a watcher holds on to the file it opened.
+    int fd = open(statePath().c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+    if (fd < 0) return;
+    std::string line = kind + "\t" + message + "\n";
+    (void)!write(fd, line.data(), line.size());
+    close(fd);
+}
+
 int connectToApp() {
     int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
     if (fd < 0) return -1;
@@ -87,6 +103,7 @@ public:
         signal(SIGPIPE, SIG_IGN);
         int signalFd = signalfd(-1, &signals, SFD_CLOEXEC | SFD_NONBLOCK);
         for (int fd : {listenFd_, statusFd_, restartTimer_, signalFd}) watch(fd);
+        publishState();
 
         session_.start();
 
@@ -97,13 +114,14 @@ public:
             for (int i = 0; i < n; i++) {
                 int fd = events[i].data.fd;
                 if (fd == listenFd_) acceptClient();
-                else if (fd == statusFd_) { drain(fd); broadcast(); }
+                else if (fd == statusFd_) { drain(fd); publishState(); broadcast(); }
                 else if (fd == restartTimer_) { drain(fd); restartPending_ = false; session_.restart(settings_); broadcast(); }
                 else if (fd == signalFd) quit_ = true;
                 else readClient(fd);
             }
         }
         unlink(socketPath().c_str());
+        writeState("stopped", "C1 Tune isn't running");
         session_.releaseCamera();
         return 0;
     }
@@ -144,6 +162,13 @@ private:
         { std::lock_guard guard(statusLock_); status_ = std::move(status); }
         uint64_t one = 1;
         (void)!write(statusFd_, &one, sizeof one);
+    }
+
+    void publishState() {
+        Session::Status status;
+        { std::lock_guard guard(statusLock_); status = status_; }
+        static const char *kinds[] = {"notConnected", "starting", "ready", "busy", "failed"};
+        writeState(kinds[status.kind], status.message);
     }
 
     std::string stateLine() {

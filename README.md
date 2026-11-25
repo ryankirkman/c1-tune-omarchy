@@ -61,6 +61,13 @@ o.bind("SUPER + ALT + C", "C1 Tune", "c1-tune --panel")
 
 Either one opens the panel, and closes it if it's already open.
 
+The bar icon shows the camera's state the way the macOS menu bar icon does: normal when the
+camera is ready, dimmed when it isn't (unplugged, starting, or C1 Tune not running), and the
+bar's alert colour when something needs doing (not responding, no USB permission, no
+firmware). The tooltip says which. It polls nothing: C1 Tune writes its status to
+`$XDG_RUNTIME_DIR/c1-tune.state` when it changes and the button watches that file. After
+updating the button's files, `omarchy restart shell` loads them.
+
 ## Controls
 
 | | |
@@ -251,6 +258,7 @@ every half second, which the camera requires). The panel exists only while it's 
 | `src/main.cpp` | The app's event loop, its socket, and the command line |
 | `panel/` | The control panel |
 | `bar-widget/` | A button for the Omarchy bar |
+| `tests/` | Protocol tests (`make test`), and under `tests/ui/` the tools for clicking through the real panel |
 | `scripts/fetch-opal-tuning` | Gets Opal's tuning files from Opal's installer |
 | `pkgbuild/` | Arch package, udev rule, WirePlumber rule, launcher entry, icon |
 
