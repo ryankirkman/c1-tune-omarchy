@@ -31,12 +31,12 @@ own it only shows "C1 Tune isn't running".
 
 ```bash
 git clone https://github.com/ryankirkman/c1-tune-omarchy.git && cd c1-tune-omarchy
-git checkout --detach RELEASE_COMMIT
-make install PIN=RELEASE_COMMIT      # builds the package and installs it with pacman (asks for sudo)
+git checkout --detach 08fa30131ac14a3a012362554dd8ec161fc90691
+make install PIN=08fa30131ac14a3a012362554dd8ec161fc90691      # builds the package and installs it with pacman (asks for sudo)
 omarchy plugin add https://github.com/ryankirkman/c1-tune-omarchy --enable     # the bar button
 ```
 
-`RELEASE_COMMIT` is the full commit of release RELEASE_VERSION. The install is bound to it:
+`08fa30131ac14a3a012362554dd8ec161fc90691` is the full commit of release 0.1.2. The install is bound to it:
 `make install` refuses to build unless the checkout is exactly that commit with nothing
 changed or added, and the PKGBUILD checks the same thing again before it compiles. So what is
 built and installed as root is that release, not whatever the branch holds on the day you
@@ -69,9 +69,9 @@ The plugin writes nothing outside its own folder except `$XDG_RUNTIME_DIR/c1-tun
 Only the udev rule needs sudo:
 
 ```bash
-git checkout --detach RELEASE_COMMIT
-make udev PIN=RELEASE_COMMIT            # once: lets you talk to the camera
-make install-user PIN=RELEASE_COMMIT    # app, panel, launcher entry, bar button and audio rule under ~/.local and ~/.config
+git checkout --detach 08fa30131ac14a3a012362554dd8ec161fc90691
+make udev PIN=08fa30131ac14a3a012362554dd8ec161fc90691            # once: lets you talk to the camera
+make install-user PIN=08fa30131ac14a3a012362554dd8ec161fc90691    # app, panel, launcher entry, bar button and audio rule under ~/.local and ~/.config
 omarchy plugin enable com.ryankirkman.c1-tune
 omarchy restart shell
 ```
