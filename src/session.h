@@ -70,6 +70,8 @@ private:
     void dropLink();
 
     void connect(bool secondTry = false);
+    bool bootedPresent();
+    void rebootBooted();
     template <typename Open> auto retrying(const char *message, int attempts, Open open);
     void upload(const Bytes &image, USBPipe &pipe);
     void attach(std::unique_ptr<XLinkConnection> connection, bool freshBoot);
@@ -98,6 +100,9 @@ private:
     int failures_ = 0;
     Clock::time_point retryAfter_{};
     Clock::time_point expectedBack_{};
+    std::string ghost_;                 // device node of a booted camera we have told to reboot
+    Clock::time_point ghostUntil_{};
+    bool ghostReset_ = false;
     bool wasPresent_ = false;
     Clock::time_point lastOpen_{};
     unsigned boot_ = 0;   // counts links, so work queued for one doesn't reach the next

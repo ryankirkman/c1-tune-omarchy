@@ -39,12 +39,21 @@ Session::~Session() {
     uint64_t one = 1;
     (void)!write(wakeFd_, &one, sizeof one);
     if (thread_.joinable()) thread_.join();
-    bool release = releaseOnExit_ && link_ != nullptr;
+    bool release = releaseOnExit_ && link_ != nullptr;   // (the destructor has no need to track ghosts)
     link_.reset();
     // Quitting hands the camera back: reboot it, and with nobody talking to its bootloader
     // it starts the factory webcam app from flash. (Left alone, the firmware only resets
     // itself if no app has streamed video since it booted; otherwise it runs on unattended.)
-    if (release) USB::rebootToBootloader();
+    if (release) {
+        auto old = USB::find(OpalPID::booted);
+        USB::rebootToBootloader();
+        // Nobody will be here to clear a leftover entry later, so see the camera into its
+        // bootloader and clear it now if the kernel has kept it (see rebootBooted).
+        if (old && monitor_.wait(OpalPID::bootloader, 3)) {
+            auto still = USB::find(OpalPID::booted);
+            if (still && still->node == old->node) USB::resetDevice(old->node);
+        }
+    }
     close(wakeFd_);
     close(inotifyFd_);
 }
@@ -81,7 +90,7 @@ void Session::restart(const CameraSettings &settings) {
         dropLink();
         // Straight to the bootloader (≈5 s to a fresh pipeline); an XLink reset would wait
         // for the standalone app to boot first (≈14 s).
-        USB::rebootToBootloader();
+        rebootBooted();
         retryAfter_ = Clock::now() + seconds(0.5);
         // The camera is off the bus for a moment between boot stages; that isn't "unplugged".
         expectedBack_ = Clock::now() + seconds(6);
@@ -265,6 +274,48 @@ void Session::report(Status status) {
 
 // MARK: - Connect or boot
 
+/// Asks the running firmware to reboot, remembering which device that was. The kernel does
+/// not always notice a USB 3 device leaving: its entry can stay listed for minutes while the
+/// camera is really in its bootloader on the USB 2 side. Until it is replaced, that entry is
+/// a ghost, and mistaking it for the freshly booted camera makes every later step fail.
+void Session::rebootBooted() {
+    if (auto device = USB::find(OpalPID::booted)) {
+        ghost_ = device->node;
+        ghostUntil_ = Clock::now() + seconds(30);
+        ghostReset_ = false;
+    }
+    // A request that fails outright means the entry was already dead (a ghost from before
+    // this app started, or a camera that has hung): have the kernel look at the port again.
+    auto device = USB::find(OpalPID::booted);
+    if (!USB::rebootToBootloader() && device) {
+        logLine("the camera didn't take the reboot request; resetting its port");
+        USB::resetDevice(device->node);
+    }
+}
+
+/// A running camera that isn't the ghost of one we rebooted. (A re-enumerated device gets a
+/// new device number, so its node differs.)
+bool Session::bootedPresent() {
+    auto device = USB::find(OpalPID::booted);
+    if (!device) return false;
+    if (Clock::now() >= ghostUntil_) ghost_.clear();
+    // A camera is one device: if it is also showing as bootloader or boot ROM, this entry is
+    // a ghost. Resetting its port makes the kernel notice and drop it (a real device can't be
+    // in two stages, so this never touches a working camera).
+    if (USB::isPresent(OpalPID::bootloader) || USB::isPresent(OpalPID::rom)) {
+        if (ghost_ != device->node) ghostReset_ = false;
+        ghost_ = device->node;
+        ghostUntil_ = Clock::now() + seconds(30);
+        if (!ghostReset_) {
+            ghostReset_ = true;
+            logLine("the kernel still lists the camera's old USB entry; clearing it");
+            USB::resetDevice(device->node);
+        }
+        return false;
+    }
+    return device->node != ghost_;
+}
+
 template <typename Open> auto Session::retrying(const char *message, int attempts, Open open) {
     // Retries `open` every 250 ms; the device takes a moment to register its interfaces.
     for (int i = 0; i < attempts; i++) {
@@ -292,7 +343,7 @@ void Session::connect(bool secondTry) {
     // Our firmware answers XLink; Opal's standalone app doesn't accept the first write, but
     // only says so by letting it time out after 2 s. The two report different device
     // versions over USB, so when it clearly isn't our firmware, skip asking.
-    if (USB::isPresent(OpalPID::booted) && USB::deviceVersion(OpalPID::booted) != standaloneVersion) {
+    if (bootedPresent() && USB::deviceVersion(OpalPID::booted) != standaloneVersion) {
         report({Status::starting, "Connecting to the camera…"});   // instant when it answers; seconds when it has hung
         Error error;
         auto existing = XLinkConnection::connect(OpalPID::booted, error, 3, logDevice, onDeath);
@@ -319,11 +370,21 @@ void Session::connect(bool secondTry) {
     BootImage::patchFrameSizes(firmware);
     step("firmware loaded");
 
-    if (USB::isPresent(OpalPID::booted)) {
-        USB::rebootToBootloader();
+    // Either we ask it to reboot now, or we already have (a restart) and it is on its way.
+    bool rebooting = !ghost_.empty() && Clock::now() < ghostUntil_;
+    if (bootedPresent()) {
+        rebootBooted();
         step("asked the camera to reboot to its bootloader");
-        if (!monitor_.wait(OpalPID::bootloader, 6))
-            throw StartError{"The camera isn't responding. Unplug it and plug it back in."};
+        rebooting = true;
+    }
+    if (rebooting) {
+        // Wait for the camera to show up in its next stage. Checking bootedPresent() as it
+        // does also clears the old entry if the kernel has left it behind.
+        bool moved = monitor_.waitUntil([this] {
+            bool other = USB::isPresent(OpalPID::bootloader) || USB::isPresent(OpalPID::rom);
+            return bootedPresent() || other;
+        }, 6);
+        if (!moved) throw StartError{"The camera isn't responding. Unplug it and plug it back in."};
     }
     if (USB::isPresent(OpalPID::bootloader)) {
         step("bootloader present");
@@ -337,16 +398,17 @@ void Session::connect(bool secondTry) {
         auto stream = bootloader->open("__bootloader", 5 << 20);
         bool asked = stream && bootloader->write(*stream, {0, 0, 0, 0}, 2);  // USB_ROM_BOOT
         if (verbose_) logLine("bootloader: watchdog %s, USB_ROM_BOOT %s", watchdog ? "open" : "refused", asked ? "sent" : stream ? "not acknowledged" : "stream refused");
-        auto next = monitor_.waitEither(OpalPID::rom, OpalPID::booted, 6);
+        bool factory = false;
+        bool moved = monitor_.waitUntil([&] { return USB::isPresent(OpalPID::rom) || (factory = bootedPresent()); }, 6);
         bootloader->close();
-        if (next == OpalPID::booted && !secondTry) {
+        if (moved && factory && !secondTry) {
             // The bootloader had already given up waiting for a host and was on its way to
             // the factory app when we asked (the app relaunched a few seconds after a quit).
             // That app is up now, so go round once more from the reboot request.
             step("the bootloader started the factory app instead; starting over");
             return connect(true);
         }
-        if (next != OpalPID::rom) throw StartError{"The camera didn't enter USB boot mode."};
+        if (!moved || factory) throw StartError{"The camera didn't enter USB boot mode."};
     }
     if (USB::isPresent(OpalPID::rom)) {
         step("boot ROM present");
@@ -358,10 +420,12 @@ void Session::connect(bool secondTry) {
         upload(BootImage::image(firmware, BootImage::boardConfig(std::nullopt, true)), *rom);
         rom->close();
         step("firmware uploaded");
-        if (!monitor_.wait(OpalPID::booted, 10)) throw StartError{"The camera didn't come back after loading firmware."};
+        if (!monitor_.waitUntil([this] { return bootedPresent(); }, 10))
+            throw StartError{"The camera didn't come back after loading firmware."};
     }
     auto connection = retrying("Couldn't connect to the camera after loading firmware.", 20, [&] {
         Error error;
+        if (!bootedPresent()) return std::unique_ptr<XLinkConnection>();   // only a ghost so far
         return XLinkConnection::connect(OpalPID::booted, error, 3, logDevice, onDeath);
     });
     step("firmware answered");

@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -39,7 +40,11 @@ bool lacksPermission(OpalPID pid);
 bool deviceRequest(OpalPID pid, uint8_t type, uint8_t request, uint16_t value, uint16_t index);
 
 /// Asks the running firmware (Opal's standalone app or ours) to reboot into the bootloader.
-inline void rebootToBootloader() { deviceRequest(OpalPID::booted, 0x00, 0xF5, 0x0DA1, 0); }
+inline bool rebootToBootloader() { return deviceRequest(OpalPID::booted, 0x00, 0xF5, 0x0DA1, 0); }
+
+/// Asks the kernel to reset the port a device is on. For a device that has really gone,
+/// the reset fails and the kernel drops its leftover entry, which is the point.
+void resetDevice(const std::string &node);
 
 /// /dev/videoN nodes that belong to the booted camera.
 std::vector<std::string> videoNodes();
@@ -62,8 +67,8 @@ public:
 
     /// Blocks until a device with `pid` is present, without polling. False on timeout.
     bool wait(OpalPID pid, double timeoutSeconds);
-    /// The same for either of two stages; says which one turned up.
-    std::optional<OpalPID> waitEither(OpalPID a, OpalPID b, double timeoutSeconds);
+    /// Blocks until `ready()` is true, rechecking only when a device arrives or leaves.
+    bool waitUntil(const std::function<bool()> &ready, double timeoutSeconds);
 
 private:
     int fd_ = -1;
