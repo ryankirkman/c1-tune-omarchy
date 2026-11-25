@@ -1,5 +1,5 @@
 pkgname=c1-tune
-pkgver=0.1.1
+pkgver=0.1.2
 pkgrel=1
 pkgdesc='Hardware controls for the Opal C1 webcam: exposure, focus, white balance, zoom'
 arch=('x86_64' 'aarch64')
@@ -10,9 +10,34 @@ license=('MIT')
 depends=('gcc-libs' 'qt6-base' 'qt6-declarative' 'qt6-wayland' 'layer-shell-qt' 'curl' 'libarchive')
 optdepends=('qt6-multimedia: live preview in the control panel'
             "python: c1-tune --fetch-tuning (Opal's image tuning)")
-makedepends=('gcc' 'make')
+makedepends=('gcc' 'make' 'git')
+# This PKGBUILD builds the checkout it sits in, so there is no source array to pin. Instead
+# it refuses to build unless that checkout is exactly the commit it was asked for
+# (C1TUNE_PIN, set by `make install PIN=<commit>`) with nothing changed or added. A git
+# commit is its own digest, which makes that an immutable source. packaging/aur/PKGBUILD
+# is the other route: a release tarball with a pinned SHA-256.
 source=()
 sha256sums=()
+
+prepare() {
+  local root="$startdir/.."
+  if [[ ${C1TUNE_PIN:-} == worktree ]]; then
+    echo "C1TUNE_PIN=worktree: packaging this working tree as it is, not a pinned release." >&2
+    return 0
+  fi
+  [[ ${C1TUNE_PIN:-} =~ ^[0-9a-f]{40}$ ]] || {
+    echo "Refusing to build an unpinned checkout. Use: make install PIN=<the 40-character commit from the README>" >&2
+    return 1
+  }
+  [[ $(git -C "$root" rev-parse HEAD) == "$C1TUNE_PIN" ]] || {
+    echo "The checkout is at $(git -C "$root" rev-parse HEAD), not the pinned $C1TUNE_PIN." >&2
+    return 1
+  }
+  [[ -z $(git -C "$root" status --porcelain) ]] || {
+    echo "The checkout has local changes or extra files; a pinned build needs it untouched." >&2
+    return 1
+  }
+}
 
 build() {
   cd "$startdir/.."

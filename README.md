@@ -31,9 +31,17 @@ own it only shows "C1 Tune isn't running".
 
 ```bash
 git clone https://github.com/ryankirkman/c1-tune-omarchy.git && cd c1-tune-omarchy
-make install                                   # builds the package and installs it with pacman (asks for sudo)
+git checkout --detach RELEASE_COMMIT
+make install PIN=RELEASE_COMMIT      # builds the package and installs it with pacman (asks for sudo)
 omarchy plugin add https://github.com/ryankirkman/c1-tune-omarchy --enable     # the bar button
 ```
+
+`RELEASE_COMMIT` is the full commit of release RELEASE_VERSION. The install is bound to it:
+`make install` refuses to build unless the checkout is exactly that commit with nothing
+changed or added, and the PKGBUILD checks the same thing again before it compiles. So what is
+built and installed as root is that release, not whatever the branch holds on the day you
+clone it. (Prefer a tarball? `packaging/aur/PKGBUILD` builds the same release from GitHub's
+tagged archive with a pinned SHA-256.)
 
 Then click the webcam icon in the bar (or open **C1 Tune** from the launcher, `Super + Space`)
 and tick **Open at login**. Settings are saved and re-applied whenever the camera connects or
@@ -61,8 +69,9 @@ The plugin writes nothing outside its own folder except `$XDG_RUNTIME_DIR/c1-tun
 Only the udev rule needs sudo:
 
 ```bash
-make udev            # once: lets you talk to the camera
-make install-user    # app, panel, launcher entry, bar button and audio rule under ~/.local and ~/.config
+git checkout --detach RELEASE_COMMIT
+make udev PIN=RELEASE_COMMIT            # once: lets you talk to the camera
+make install-user PIN=RELEASE_COMMIT    # app, panel, launcher entry, bar button and audio rule under ~/.local and ~/.config
 omarchy plugin enable com.ryankirkman.c1-tune
 omarchy restart shell
 ```
@@ -306,9 +315,10 @@ MIT; see [`LICENSE`](LICENSE). Credits and third-party notes are in [`NOTICE.md`
 |---|---|
 | `make` | Build `build/c1-tune` and `build/c1-tune-panel` |
 | `make test` | Protocol tests (no camera needed; `C1TUNE_TEST_DOWNLOAD=1` also checks the firmware download) |
-| `make install` | Build the Arch package and install it |
-| `make udev` | Install only the udev rule |
-| `make install-user` / `uninstall-user` | Install under `~/.local` and `~/.config` without sudo, or remove that |
+| `make install PIN=<commit>` | Build the Arch package from that exact commit and install it |
+| `make udev PIN=<commit>` | Install only the udev rule |
+| `make install-user PIN=<commit>` / `uninstall-user` | Install under `~/.local` and `~/.config` without sudo, or remove that |
+| `PIN=worktree` | For working on the code: build what is checked out instead of a pinned release |
 
 `make uninstall-user` undoes `make install-user`. See [Removing it](#removing-it) for the rest.
 

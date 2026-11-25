@@ -19,5 +19,12 @@ jobs:
         run: make test
       - name: Build the UI test tool
         run: make build/ptr
+      - name: An install must be pinned to an exact commit
+        run: |
+          git config --global --add safe.directory "$PWD"
+          ! make verify-pin
+          ! make verify-pin PIN=0000000000000000000000000000000000000000
+          make verify-pin PIN="$(git rev-parse HEAD)"
+          touch stray && ! make verify-pin PIN="$(git rev-parse HEAD)"; rm stray
       - name: Check the plugin manifest
         run: jq -e '.schemaVersion == 1 and (.entryPoints.barWidget | test("^bar-widget/"))' manifest.json && test -f "$(jq -r .entryPoints.barWidget manifest.json)"
