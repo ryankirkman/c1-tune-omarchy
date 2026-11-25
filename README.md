@@ -35,20 +35,22 @@ camera connects or an app starts using it.
 The first start downloads the camera's firmware from Luxonis (8 MB, once, SHA-256 pinned).
 For Opal's own picture, also run `c1-tune --fetch-tuning` once (see [Tuning](#tuning)).
 
-To run from the build directory instead, install just the udev rule:
+Without the package (nothing but the udev rule needs sudo):
 
 ```bash
-make && make udev && build/c1-tune --panel
+make udev            # once: lets you talk to the camera
+make install-user    # app, panel, launcher entry, bar button and audio rule under ~/.local and ~/.config
 ```
 
 ### On the bar, or on a key
 
-A bar button for the Omarchy shell ships with the package:
+A bar button for the Omarchy shell ships with the package (`make install-user` copies it
+for you):
 
 ```bash
 mkdir -p ~/.config/omarchy/plugins
 cp -r /usr/share/c1-tune/bar-widget ~/.config/omarchy/plugins/com.ryankirkman.c1-tune
-omarchy plugin enable com.ryankirkman.c1-tune
+omarchy plugin enable com.ryankirkman.c1-tune     # run it again if it says the plugin is unknown
 ```
 
 Or bind a key in `~/.config/hypr/bindings.lua` (pick one that's free on your setup):
@@ -78,7 +80,8 @@ Most changes apply instantly. Zoom, framing, flip, the microphone, the tuning fi
 returning sharpness/denoise to default restart the camera (about 5 seconds, once per burst
 of changes).
 
-In the panel: `Esc` or `Q` closes it, `P` toggles the preview, `R` retries after a failure.
+In the panel: `Esc` or `Q` closes it, `P` toggles the preview, `R` retries after a failure,
+`Tab` and the arrow keys move between and adjust the sliders.
 
 **Scripting:** every setting can be set from the command line, with the same keys as the
 macOS app:
@@ -122,17 +125,48 @@ The defaults (bias −1, saturation +1, sharpness 3) were chosen on top of Opal'
 With the firmware's own, colors are a little warmer and more saturated and the picture
 sharper; adjust to taste.
 
+## Microphone
+
+**Off by default.** The camera still appears as an "Opal C1" input, but with no audio
+pipeline behind it an app that records from it just waits. **On**, it's a normal USB mic set
+up the way Opal Composer does it: the two front mics at a fixed 30 dB gain.
+
+The firmware's audio side is fragile in a way Linux exposes and macOS doesn't: **a
+microphone stop followed straight away by a start hangs the camera for good** (no video, no
+USB) until it is unplugged. Two things in a normal PipeWire session do exactly that, and
+both are handled:
+
+- **PipeWire probes a new sound card** by opening and closing it about 60 times in a tenth
+  of a second. A microphone pipeline starting inside that burst hung the camera 4 times out
+  of 4. C1 Tune now waits until the sound card has been left alone for 400 ms before it
+  starts a pipeline with the microphone (about half a second, only with Microphone on):
+  0 hangs in 11 boots.
+- **PipeWire releases an idle device after 5 seconds.** Recording again at that moment
+  (the pause between two dictated sentences) hung it. The package installs a WirePlumber
+  rule (`opal-c1-no-suspend.conf`) that keeps this one microphone open, so the camera sees
+  a single start and no stops. With it: 33 recordings with pauses from 0.1 to 20 s,
+  including 18 across the 4.7–5.4 s range that hung it, and four WirePlumber restarts with
+  the microphone in use, without a hang.
+
+What is **not** protected: a program that bypasses PipeWire and opens and closes the ALSA
+device itself in rapid succession (fifteen record start/kill cycles a quarter of a second
+apart hung it). Nothing ordinary does that. If the camera does hang, C1 Tune says "The
+camera isn't responding. Unplug it and plug it back in."
+
 ## Measured
 
 On an IMX378 Opal C1 behind a USB 3 hub, Omarchy on x86-64, three runs each:
 
 | | |
 |---|---|
-| Camera's bootloader appears → ready (the plug-in path) | 2.95 s |
+| Plugged in (kernel first sees it) → ready, app already running | 3.06 s |
+| Camera's bootloader appears → ready | 2.95 s |
 | …→ first video frame in an app | 3.1 s |
+| The same with Microphone on (waits out PipeWire's probe) | 3.45 s |
 | App launched with the camera in factory mode → ready | 3.6–3.7 s |
 | Zoom/flip/microphone restart, after the 1 s it waits for more changes | 4.0 s |
 | App relaunched while the camera is running → ready | 0.03–0.09 s |
+| Quit, then reopened 0.3–12 s later → ready | 2.9–6.6 s |
 | Panel window on screen after `c1-tune --panel` | 0.23 s |
 | CPU, camera ready and idle | 3.8 ms per 30 s (0.013% of a core) |
 | CPU, while another app streams | 0.02% of a core |
@@ -171,8 +205,11 @@ the same reference fixtures, byte for byte.
   sends the reboot request itself, and the camera's bootloader, with nobody talking to it,
   starts the factory app. If C1 Tune is killed instead, the camera may keep running its last
   pipeline until it is unplugged or C1 Tune starts again (and reattaches).
-- **Microphone off means no audio at all on Linux.** The mic still appears (as "Opal C1"),
-  but a recorder gets no samples and waits, rather than recording silence.
+- **The microphone must never be stopped and started in quick succession**; see
+  [Microphone](#microphone).
+- **A bootloader that has waited about four seconds ignores the boot-ROM command** and
+  starts the factory app. Reopening C1 Tune a few seconds after quitting it lands there, so
+  the boot then goes round once more instead of failing.
 - **Every app gets 1920×1080 NV12 at 30 fps**, and nothing else is advertised.
 </details>
 
@@ -205,7 +242,7 @@ every half second, which the camera requires). The panel exists only while it's 
 | `panel/` | The control panel |
 | `bar-widget/` | A button for the Omarchy bar |
 | `scripts/fetch-opal-tuning` | Gets Opal's tuning files from Opal's installer |
-| `pkgbuild/` | Arch package, udev rule, launcher entry, icon |
+| `pkgbuild/` | Arch package, udev rule, WirePlumber rule, launcher entry, icon |
 
 Files: settings in `~/.config/c1-tune/settings.json`, firmware in `~/.local/share/c1-tune/`.
 
@@ -217,6 +254,7 @@ Files: settings in `~/.config/c1-tune/settings.json`, firmware in `~/.local/shar
 | `make test` | Protocol tests (no camera needed; `C1TUNE_TEST_DOWNLOAD=1` also checks the firmware download) |
 | `make install` | Build the Arch package and install it |
 | `make udev` | Install only the udev rule |
+| `make install-user` / `uninstall-user` | Install under `~/.local` and `~/.config` without sudo, or remove that |
 
 Uninstall with `sudo pacman -R c1-tune`; settings and the cached firmware are the two
 directories above.
@@ -227,6 +265,7 @@ directories above.
   tuning is picked automatically but untested.
 - **English only.** The panel's strings are marked for translation but no catalogs ship yet.
 - **No live readout of auto values**, and **zoom restarts the camera**, as on macOS.
-- **The microphone can't be hidden**, and its gain is fixed, as on macOS.
+- **The microphone can't be hidden**, and its gain is fixed, as on macOS. Its firmware can be
+  hung by rapid direct ALSA open/close cycles (see [Microphone](#microphone)).
 - If the camera hangs off a monitor's USB hub, it disappears when the monitor sleeps. C1 Tune
   picks it up again when it returns.

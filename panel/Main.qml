@@ -276,7 +276,7 @@ ApplicationWindow {
                     font.pixelSize: 13
                     ToolTip.visible: hovered
                     ToolTip.delay: 700
-                    ToolTip.text: qsTr("Turns on the camera's built-in microphone. When off, it still appears but records silence. Restarts the camera (about 5 seconds).")
+                    ToolTip.text: qsTr("Turns on the camera's built-in microphone. When off, it still appears but gives no sound. Restarts the camera (about 5 seconds).")
                     onToggled: backend.set("microphone", checked)
                 }
             }
