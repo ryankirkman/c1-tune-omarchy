@@ -420,14 +420,19 @@ void Session::waitForAudioProbe() {
         sleepFor(1.5);   // can't watch: wait out a typical probe instead
         return;
     }
+    // With PipeWire in the session the probe is certain to come, so if it hasn't started yet
+    // (PipeWire still starting at login) wait for it rather than start underneath it.
+    const char *runtime = getenv("XDG_RUNTIME_DIR");
+    bool pipewire = runtime && access((std::string(runtime) + "/pipewire-0").c_str(), F_OK) == 0;
     auto started = Clock::now();
     auto quietSince = started;
     int events = 0;
     while (true) {
         auto now = Clock::now();
-        if (now - quietSince >= seconds(0.4) || now - started >= seconds(4)) break;
+        bool quiet = now - quietSince >= seconds(0.4);
+        if (now - started >= seconds(8) || (quiet && (events > 0 || !pipewire || now - started >= seconds(5)))) break;
         pollfd p{fd, POLLIN, 0};
-        int left = int(std::chrono::duration_cast<std::chrono::milliseconds>(seconds(0.4) - (now - quietSince)).count()) + 1;
+        int left = quiet ? 250 : int(std::chrono::duration_cast<std::chrono::milliseconds>(seconds(0.4) - (now - quietSince)).count()) + 1;
         if (poll(&p, 1, left) <= 0) continue;
         auto ours = USB::audioCaptureNodes();
         alignas(inotify_event) char buf[4096];

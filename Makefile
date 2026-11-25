@@ -43,11 +43,13 @@ install-user: all
 	sed 's|^Exec=c1-tune|Exec=$(HOME)/.local/bin/c1-tune|' pkgbuild/c1-tune.desktop > build/c1-tune.desktop
 	install -Dm644 build/c1-tune.desktop $(HOME)/.local/share/applications/c1-tune.desktop
 	install -Dm644 -t $(HOME)/.config/omarchy/plugins/com.ryankirkman.c1-tune bar-widget/manifest.json bar-widget/BarWidget.qml
+	install -Dm644 pkgbuild/opal-c1-no-suspend.conf $(HOME)/.config/wireplumber/wireplumber.conf.d/opal-c1-no-suspend.conf
 
 uninstall-user:
 	rm -f $(HOME)/.local/bin/c1-tune $(HOME)/.local/bin/c1-tune-panel $(HOME)/.local/share/applications/c1-tune.desktop
 	rm -f $(HOME)/.local/share/icons/hicolor/scalable/apps/c1-tune.svg $(HOME)/.config/autostart/c1-tune.desktop
 	rm -rf $(HOME)/.local/share/c1-tune/fetch-opal-tuning $(HOME)/.config/omarchy/plugins/com.ryankirkman.c1-tune
+	rm -f $(HOME)/.config/wireplumber/wireplumber.conf.d/opal-c1-no-suspend.conf
 
 # Just the udev rule, for running from the build directory without the package.
 udev:
