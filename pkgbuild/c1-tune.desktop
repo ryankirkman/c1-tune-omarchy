@@ -5,6 +5,6 @@ Comment=Hardware controls for the Opal C1 webcam
 Exec=c1-tune --panel
 Icon=c1-tune
 Terminal=false
-Categories=Utility;AudioVideo;Video;
+Categories=Utility;
 Keywords=webcam;camera;opal;exposure;focus;zoom;
 StartupWMClass=c1-tune

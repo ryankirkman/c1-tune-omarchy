@@ -164,7 +164,10 @@ void Session::streamStarted() {
     if (now - lastOpen_ < seconds(1)) return;   // the open and the stream start of one app, or several opens
     lastOpen_ = now;
     for (double delay : {0.8, 2.5}) {
-        post([this] {
+        // Meant for the pipeline that is running now: after a restart they would only pile
+        // onto the new one's first moments.
+        post([this, boot = boot_] {
+            if (boot != boot_) return;
             {
                 std::lock_guard guard(pendingLock_);
                 for (int g = 0; g < CameraSettings::groupCount; g++) pending_[CameraSettings::Group(g)] = settings_.control(CameraSettings::Group(g));
@@ -191,6 +194,7 @@ void Session::flush() {
 }
 
 void Session::dropLink() {
+    boot_++;
     if (link_) link_->close();
     link_.reset();
     controlStream_.reset();
@@ -276,7 +280,7 @@ void Session::connect() {
         if (verbose_) logLine("+%.2f s: %s", std::chrono::duration<double>(Clock::now() - began).count(), what);
     };
     XLinkConnection::Log logDevice = [this](const std::string &text) {
-        if (verbose_) logLine("device: %.1500s", text.c_str());
+        if (verbose_) logLine(text.rfind("xlink: ", 0) == 0 ? "%.1500s" : "device: %.1500s", text.c_str());
         // The firmware prints this the moment a host starts the video stream: the exact
         // signal the settings need re-sending on (called on the link's reader thread).
         if (text.find("UvcDevice_Start") != std::string::npos) post([this] { streamStarted(); });
@@ -289,6 +293,7 @@ void Session::connect() {
     // only says so by letting it time out after 2 s. The two report different device
     // versions over USB, so when it clearly isn't our firmware, skip asking.
     if (USB::isPresent(OpalPID::booted) && USB::deviceVersion(OpalPID::booted) != standaloneVersion) {
+        report({Status::starting, "Connecting to the camera…"});   // instant when it answers; seconds when it has hung
         Error error;
         auto existing = XLinkConnection::connect(OpalPID::booted, error, 3, logDevice, onDeath);
         if (!existing && error == Error::noAnswer) existing = XLinkConnection::connect(OpalPID::booted, error, 3, logDevice, onDeath);
@@ -317,7 +322,8 @@ void Session::connect() {
     if (USB::isPresent(OpalPID::booted)) {
         USB::rebootToBootloader();
         step("asked the camera to reboot to its bootloader");
-        if (!monitor_.wait(OpalPID::bootloader, 6)) throw StartError{"The camera didn't restart into its bootloader."};
+        if (!monitor_.wait(OpalPID::bootloader, 6))
+            throw StartError{"The camera isn't responding. Unplug it and plug it back in."};
     }
     if (USB::isPresent(OpalPID::bootloader)) {
         step("bootloader present");

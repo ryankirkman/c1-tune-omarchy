@@ -33,6 +33,22 @@ build/tests: $(CORE) tests/main.cpp $(HEADERS) Makefile
 install:
 	cd pkgbuild && makepkg -fsi
 
+# Without sudo: the same files under ~/.local, plus the bar widget. The udev rule still has
+# to be installed once (make udev); the package (make install) supersedes all of this.
+install-user: all
+	install -Dm755 build/c1-tune $(HOME)/.local/bin/c1-tune
+	install -Dm755 build/c1-tune-panel $(HOME)/.local/bin/c1-tune-panel
+	install -Dm755 scripts/fetch-opal-tuning $(HOME)/.local/share/c1-tune/fetch-opal-tuning
+	install -Dm644 pkgbuild/c1-tune.svg $(HOME)/.local/share/icons/hicolor/scalable/apps/c1-tune.svg
+	sed 's|^Exec=c1-tune|Exec=$(HOME)/.local/bin/c1-tune|' pkgbuild/c1-tune.desktop > build/c1-tune.desktop
+	install -Dm644 build/c1-tune.desktop $(HOME)/.local/share/applications/c1-tune.desktop
+	install -Dm644 -t $(HOME)/.config/omarchy/plugins/com.ryankirkman.c1-tune bar-widget/manifest.json bar-widget/BarWidget.qml
+
+uninstall-user:
+	rm -f $(HOME)/.local/bin/c1-tune $(HOME)/.local/bin/c1-tune-panel $(HOME)/.local/share/applications/c1-tune.desktop
+	rm -f $(HOME)/.local/share/icons/hicolor/scalable/apps/c1-tune.svg $(HOME)/.config/autostart/c1-tune.desktop
+	rm -rf $(HOME)/.local/share/c1-tune/fetch-opal-tuning $(HOME)/.config/omarchy/plugins/com.ryankirkman.c1-tune
+
 # Just the udev rule, for running from the build directory without the package.
 udev:
 	sudo install -Dm644 pkgbuild/70-opal-c1.rules /etc/udev/rules.d/70-opal-c1.rules
@@ -42,4 +58,4 @@ udev:
 clean:
 	rm -rf build
 
-.PHONY: all test install udev clean
+.PHONY: all test install install-user uninstall-user udev clean

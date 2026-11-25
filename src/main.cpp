@@ -282,7 +282,7 @@ private:
     CameraSettings settings_;
     Session session_;
     std::mutex statusLock_;
-    Session::Status status_;   // guarded by statusLock_
+    Session::Status status_{Session::Status::starting, "Looking for the camera…"};   // guarded by statusLock_
     std::map<int, Client> clients_;
     int epoll_ = -1, listenFd_ = -1, statusFd_ = -1, restartTimer_ = -1;
     bool restartPending_ = false;
@@ -323,7 +323,8 @@ std::string siblingPath(const char *name) {
 /// Starts the app detached from this process if it isn't running yet.
 void ensureAppRunning() {
     if (int fd = connectToApp(); fd >= 0) { close(fd); return; }
-    if (fork() == 0) {
+    pid_t child = fork();
+    if (child == 0) {
         setsid();
         if (fork() != 0) _exit(0);
         int null = open("/dev/null", O_RDWR);
@@ -332,6 +333,7 @@ void ensureAppRunning() {
         execl(self.c_str(), "c1-tune", nullptr);
         _exit(127);
     }
+    if (child > 0) waitpid(child, nullptr, 0);   // the go-between exits at once; don't leave it a zombie
     for (int i = 0; i < 40; i++) {   // up to a second for its socket to appear
         if (int fd = connectToApp(); fd >= 0) { close(fd); return; }
         usleep(25000);
@@ -379,8 +381,8 @@ int main(int argc, char **argv) {
     if (mode == "--retry") return request("retry", false);
     if (mode == "--restart") return request("restart", false);
     if (mode == "--fetch-tuning") {
-        // Installed beside the app's data; in a checkout, under scripts/.
-        for (std::string script : {std::string("/usr/share/c1-tune/fetch-opal-tuning"), siblingPath("../scripts/fetch-opal-tuning")}) {
+        // Installed under share/ beside bin/ (/usr or ~/.local); in a checkout, under scripts/.
+        for (std::string script : {siblingPath("../share/c1-tune/fetch-opal-tuning"), siblingPath("../scripts/fetch-opal-tuning")}) {
             if (access(script.c_str(), X_OK) != 0) continue;
             pid_t child = fork();
             if (child == 0) { execl(script.c_str(), script.c_str(), nullptr); _exit(127); }
@@ -397,7 +399,7 @@ int main(int argc, char **argv) {
     if (mode == "--panel") {
         ensureAppRunning();
         std::string panel = siblingPath("c1-tune-panel");
-        execv(panel.c_str(), argv + 1);
+        execl(panel.c_str(), "c1-tune-panel", nullptr);
         fprintf(stderr, "Couldn't start %s: %s\n", panel.c_str(), strerror(errno));
         return 1;
     }

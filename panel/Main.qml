@@ -14,7 +14,10 @@ ApplicationWindow {
     readonly property bool failed: backend.connected && backend.status === "failed"
     readonly property int margin: 14
     // A window that can't be resized is one Hyprland floats, which is what a panel wants.
-    readonly property int panelHeight: Math.min(content.implicitHeight + 2 * margin, Screen.desktopAvailableHeight - 96)
+    // On a short screen the panel is as tall as fits and scrolls. (C1TUNE_PANEL_MAX_HEIGHT
+    // imposes that on any screen, for testing it.)
+    readonly property int panelHeight: Math.min(content.implicitHeight + 2 * margin,
+                                                maxHeight > 0 ? maxHeight : Screen.desktopAvailableHeight - 96)
 
     function setting(key, fallback) {
         var value = s[key]
@@ -46,16 +49,18 @@ ApplicationWindow {
     // Set once here; every control inherits it.
     Material.roundedScale: theme.radius
 
-    Shortcut { sequences: ["Escape", "Q"]; context: Qt.ApplicationShortcut; onActivated: Qt.quit() }
-    Shortcut { sequence: "P"; context: Qt.ApplicationShortcut; onActivated: backend.preview = !backend.preview }
-    Shortcut { sequence: "R"; context: Qt.ApplicationShortcut; onActivated: if (window.failed) backend.retry() }
+    // While the dropdown is open the keys belong to it: Esc closes the list, not the panel.
+    Shortcut { sequences: ["Escape", "Q"]; context: Qt.ApplicationShortcut; enabled: !flicker.popup.visible; onActivated: Qt.quit() }
+    Shortcut { sequence: "P"; context: Qt.ApplicationShortcut; enabled: !flicker.popup.visible; onActivated: backend.preview = !backend.preview }
+    Shortcut { sequence: "R"; context: Qt.ApplicationShortcut; enabled: !flicker.popup.visible; onActivated: if (window.failed) backend.retry() }
 
     Flickable {
         anchors.fill: parent
         contentHeight: content.implicitHeight + 2 * window.margin
         clip: true
         boundsBehavior: Flickable.StopAtBounds
-        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+        // Narrow enough to sit in the margin beside the value labels, not over them.
+        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; width: 8; padding: 2 }
 
         ColumnLayout {
             id: content
@@ -80,7 +85,8 @@ ApplicationWindow {
                 Label {
                     text: !backend.connected ? qsTr("C1 Tune isn't running")
                         : window.failed ? qsTr("Failed")
-                        : backend.restartPending ? qsTr("Restarting camera…") : backend.message
+                        : backend.restartPending && backend.status !== "notConnected" ? qsTr("Restarting camera…")
+                        : backend.message
                     textFormat: Text.PlainText
                     font.pixelSize: 12
                     color: theme.dim
@@ -120,6 +126,12 @@ ApplicationWindow {
                 source: "CameraPreview.qml"
                 Rectangle { anchors.fill: parent; z: -1; color: "black"; visible: backend.preview }
             }
+
+            // Everything that changes the camera, greyed out while there's no app to tell.
+            ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 3
+            enabled: backend.connected
 
             SectionHeader {
                 title: qsTr("Exposure")
@@ -236,6 +248,7 @@ ApplicationWindow {
                     Layout.fillWidth: true
                 }
                 ComboBox {
+                    id: flicker
                     model: [qsTr("Off"), qsTr("50 Hz"), qsTr("60 Hz"), qsTr("Auto")]
                     currentIndex: Math.min(Math.max(setting("antiFlicker", 3), 0), 3)
                     font.pixelSize: 13
@@ -267,6 +280,8 @@ ApplicationWindow {
                     onToggled: backend.set("microphone", checked)
                 }
             }
+            }
+
             RowLayout {
                 Layout.fillWidth: true
                 CheckBox {

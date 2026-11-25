@@ -43,12 +43,14 @@ int main(int argc, char *argv[]) {
 
     QQuickStyle::setStyle("Material");
 
-    Theme theme;
+    // C1TUNE_THEME_DIR stands in for ~/.local/state/omarchy/current when testing themes.
+    Theme theme(qEnvironmentVariable("C1TUNE_THEME_DIR"));
     Backend backend;
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("theme", &theme);
     engine.rootContext()->setContextProperty("backend", &backend);
+    engine.rootContext()->setContextProperty("maxHeight", qEnvironmentVariableIntValue("C1TUNE_PANEL_MAX_HEIGHT"));
     // C1TUNE_QML_DIR loads the QML from a directory instead, for working on the layout.
     const QString qmlDirectory = qEnvironmentVariable("C1TUNE_QML_DIR");
     engine.load(qmlDirectory.isEmpty() ? QUrl("qrc:/Main.qml") : QUrl::fromLocalFile(qmlDirectory + "/Main.qml"));

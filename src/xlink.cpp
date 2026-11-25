@@ -115,6 +115,7 @@ std::optional<uint32_t> XLinkConnection::open(const std::string &name, uint32_t 
     h.size = (size + 63) & ~63u;
     Header r;
     if (exchange(h, nullptr, 3, &r) != Outcome::response || (r.flags & 1) != 1) return {};
+    if (onLog_) onLog_("xlink: opened " + name + " as stream " + std::to_string(r.streamId) + " (asked for " + std::to_string(local) + ")");
     std::lock_guard guard(state_);
     streams_[name] = r.streamId;
     hostStreams_.insert(r.streamId);
@@ -280,6 +281,7 @@ void XLinkConnection::handle(const Header &h, Bytes body) {
         reply.size = h.size;
         reply.streamId = id;
         send(reply);
+        if (onLog_) onLog_("xlink: camera opened " + h.name + ", given stream " + std::to_string(id) + " (it asked for " + std::to_string(h.streamId) + ")");
         break;
     }
     case closeStreamReq:

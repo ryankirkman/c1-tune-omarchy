@@ -99,6 +99,7 @@ private:
     Clock::time_point expectedBack_{};
     bool wasPresent_ = false;
     Clock::time_point lastOpen_{};
+    unsigned boot_ = 0;   // counts links, so work queued for one doesn't reach the next
     std::vector<int> videoWatches_;
 
     std::mutex pendingLock_;
