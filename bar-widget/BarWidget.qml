@@ -9,8 +9,9 @@ import qs.Commons
 // starting, or C1 Tune not running), and the bar's alert colour when something needs doing.
 // A click asks c1-tune to open or close its panel, starting the app first if it isn't running.
 //
-// It runs nothing of its own and polls nothing: c1-tune writes its status to a small file
-// whenever it changes, and this watches the file.
+// It polls nothing: c1-tune writes its status to a small file whenever it changes, and this
+// watches the file. The only commands it ever runs are `c1-tune --panel` on a click and, once
+// at start, a one-liner that creates that status file if it isn't there yet.
 BarWidget {
   id: root
   moduleName: "com.ryankirkman.c1-tune"

@@ -29,6 +29,7 @@ package() {
   install -Dm755 build/c1-tune "$pkgdir/usr/bin/c1-tune"
   install -Dm755 build/c1-tune-panel "$pkgdir/usr/bin/c1-tune-panel"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 NOTICE.md "$pkgdir/usr/share/licenses/$pkgname/NOTICE.md"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
   install -Dm644 "$startdir/70-opal-c1.rules" "$pkgdir/usr/lib/udev/rules.d/70-opal-c1.rules"
   install -Dm644 "$startdir/opal-c1-no-suspend.conf" "$pkgdir/usr/share/wireplumber/wireplumber.conf.d/opal-c1-no-suspend.conf"

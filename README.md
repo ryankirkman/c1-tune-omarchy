@@ -285,6 +285,21 @@ every half second, which the camera requires). The panel exists only while it's 
 
 Files: settings in `~/.config/c1-tune/settings.json`, firmware in `~/.local/share/c1-tune/`.
 
+## Dependencies
+
+| | Needs |
+|---|---|
+| The bar button (the plugin) | The `c1-tune` app below. Nothing else: it reads a status file and runs `c1-tune --panel`. |
+| The app | `gcc-libs` only (libc and libstdc++); a udev rule for USB access, installed by the package |
+| The control panel | `qt6-base`, `qt6-declarative`, `qt6-wayland`, `layer-shell-qt` (all part of Omarchy) |
+| First start | `curl` and `libarchive` (`bsdtar`), to fetch and unpack the camera's firmware from Luxonis |
+| Optional | `qt6-multimedia` for the live preview; `python` for `c1-tune --fetch-tuning` |
+| To build | `gcc`, `make`, `qt6-base` (for `qmake6`) |
+
+## License
+
+MIT; see [`LICENSE`](LICENSE). Credits and third-party notes are in [`NOTICE.md`](NOTICE.md).
+
 ## Make targets
 
 | | |
