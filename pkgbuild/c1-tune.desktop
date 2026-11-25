@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=C1 Tune
+Comment=Hardware controls for the Opal C1 webcam
+Exec=c1-tune --panel
+Icon=c1-tune
+Terminal=false
+Categories=Utility;AudioVideo;Video;
+Keywords=webcam;camera;opal;exposure;focus;zoom;
+StartupWMClass=c1-tune

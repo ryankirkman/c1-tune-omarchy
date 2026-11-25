@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "com.ryankirkman.c1-tune",
+  "name": "C1 Tune",
+  "version": "0.1.0",
+  "author": "Ryan Kirkman",
+  "license": "MIT",
+  "description": "Opens the Opal C1 webcam's controls",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "barWidget": {
+    "displayName": "C1 Tune",
+    "description": "Opens the Opal C1 webcam's controls",
+    "category": "Video",
+    "allowMultiple": false
+  }
+}

@@ -1,0 +1,4 @@
+# Opal C1 webcam (Intel Movidius Myriad X): lets the logged-in user talk to the camera over
+# USB in each of its three boot stages, so C1 Tune runs without root.
+#   03e7:f63b  running firmware      03e7:f63c  bootloader      03e7:2485  USB boot ROM
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="03e7", ATTR{idProduct}=="f63b|f63c|2485", TAG+="uaccess"

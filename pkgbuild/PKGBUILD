@@ -1,0 +1,36 @@
+pkgname=c1-tune
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Hardware controls for the Opal C1 webcam: exposure, focus, white balance, zoom'
+arch=('x86_64' 'aarch64')
+url='https://github.com/ryankirkman/c1-tune-omarchy'
+license=('MIT')
+# The app itself needs only libc and libstdc++. Qt is for the control panel; curl and
+# bsdtar (libarchive) fetch and unpack the camera's firmware once.
+depends=('gcc-libs' 'qt6-base' 'qt6-declarative' 'qt6-wayland' 'curl' 'libarchive')
+optdepends=('qt6-multimedia: live preview in the control panel')
+makedepends=('gcc' 'make')
+source=()
+sha256sums=()
+
+build() {
+  cd "$startdir/.."
+  make
+}
+
+check() {
+  cd "$startdir/.."
+  make test
+}
+
+package() {
+  cd "$startdir/.."
+  install -Dm755 build/c1-tune "$pkgdir/usr/bin/c1-tune"
+  install -Dm755 build/c1-tune-panel "$pkgdir/usr/bin/c1-tune-panel"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 "$startdir/70-opal-c1.rules" "$pkgdir/usr/lib/udev/rules.d/70-opal-c1.rules"
+  install -Dm644 "$startdir/c1-tune.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/c1-tune.svg"
+  install -Dm644 "$startdir/c1-tune.desktop" "$pkgdir/usr/share/applications/c1-tune.desktop"
+  install -Dm644 -t "$pkgdir/usr/share/c1-tune/bar-widget" bar-widget/manifest.json bar-widget/BarWidget.qml
+}
