@@ -42,6 +42,8 @@ install:
 
 # Without sudo: the same files under ~/.local, plus the bar widget. The udev rule still has
 # to be installed once (make udev); the package (make install) supersedes all of this.
+PLUGIN := $(HOME)/.config/omarchy/plugins/com.ryankirkman.c1-tune
+
 install-user: all
 	install -Dm755 build/c1-tune $(HOME)/.local/bin/c1-tune
 	install -Dm755 build/c1-tune-panel $(HOME)/.local/bin/c1-tune-panel
@@ -49,7 +51,8 @@ install-user: all
 	install -Dm644 pkgbuild/c1-tune.svg $(HOME)/.local/share/icons/hicolor/scalable/apps/c1-tune.svg
 	sed 's|^Exec=c1-tune|Exec=$(HOME)/.local/bin/c1-tune|' pkgbuild/c1-tune.desktop > build/c1-tune.desktop
 	install -Dm644 build/c1-tune.desktop $(HOME)/.local/share/applications/c1-tune.desktop
-	install -Dm644 -t $(HOME)/.config/omarchy/plugins/com.ryankirkman.c1-tune bar-widget/manifest.json bar-widget/BarWidget.qml
+	install -Dm644 manifest.json $(PLUGIN)/manifest.json
+	install -Dm644 bar-widget/BarWidget.qml $(PLUGIN)/bar-widget/BarWidget.qml
 	install -Dm644 pkgbuild/opal-c1-no-suspend.conf $(HOME)/.config/wireplumber/wireplumber.conf.d/opal-c1-no-suspend.conf
 
 uninstall-user:

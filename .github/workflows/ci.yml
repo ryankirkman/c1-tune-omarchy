@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install build dependencies
+        run: pacman -Syu --noconfirm base-devel git jq qt6-base qt6-declarative qt6-wayland layer-shell-qt wayland
+      - uses: actions/checkout@v4
+      - name: Build the app and the panel
+        run: make
+      - name: Protocol tests
+        run: make test
+      - name: Build the UI test tool
+        run: make build/ptr
+      - name: Check the plugin manifest
+        run: jq -e '.schemaVersion == 1 and (.entryPoints.barWidget | test("^bar-widget/"))' manifest.json && test -f "$(jq -r .entryPoints.barWidget manifest.json)"

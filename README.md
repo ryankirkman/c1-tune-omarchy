@@ -1,5 +1,7 @@
 # C1 Tune for Omarchy
 
+[![CI](https://github.com/ryankirkman/c1-tune-omarchy/actions/workflows/ci.yml/badge.svg)](https://github.com/ryankirkman/c1-tune-omarchy/actions/workflows/ci.yml)
+
 A small, fast tool for the **Opal C1** webcam on [Omarchy](https://omarchy.org) (Arch +
 Hyprland): real hardware controls, applied by the camera itself, and nothing else. A port of
 [C1 Tune for macOS](https://github.com/ryankirkman/c1-tune).
@@ -22,51 +24,53 @@ Not affiliated with or endorsed by Opal Camera.
 
 ## Install
 
+Two pieces: the app (an Arch package, because talking to the camera needs a udev rule) and
+the button for the Omarchy bar (an Omarchy plugin).
+
 ```bash
 git clone https://github.com/ryankirkman/c1-tune-omarchy.git && cd c1-tune-omarchy
-make install     # builds the Arch package and installs it with pacman (asks for sudo)
+make install                                   # builds the package and installs it with pacman (asks for sudo)
+omarchy plugin add https://github.com/ryankirkman/c1-tune-omarchy --enable     # the bar button
 ```
 
-The package installs `c1-tune`, its control panel, a launcher entry, and the udev rule that
-lets you (not just root) talk to the camera. Then open **C1 Tune** from the launcher
-(`Super + Space`) and tick **Open at login**. Settings are saved and re-applied whenever the
-camera connects or an app starts using it.
+Then click the webcam icon in the bar (or open **C1 Tune** from the launcher, `Super + Space`)
+and tick **Open at login**. Settings are saved and re-applied whenever the camera connects or
+an app starts using it.
 
-The first start downloads the camera's firmware from Luxonis (8 MB, once, SHA-256 pinned).
-For Opal's own picture, also run `c1-tune --fetch-tuning` once (see [Tuning](#tuning)).
+- The first start downloads the camera's firmware from Luxonis (8 MB, once, SHA-256 pinned).
+- For Opal's own picture, run `c1-tune --fetch-tuning` once (see [Tuning](#tuning)).
+- The package also installs a WirePlumber rule that keeps the camera's microphone open; log
+  out and in (or `systemctl --user restart wireplumber`) once for it to apply. It only
+  matters if you switch **Microphone** on (see [Microphone](#microphone)).
 
-Without the package (nothing but the udev rule needs sudo):
+Without the package (only the udev rule needs sudo):
 
 ```bash
 make udev            # once: lets you talk to the camera
 make install-user    # app, panel, launcher entry, bar button and audio rule under ~/.local and ~/.config
+omarchy plugin enable com.ryankirkman.c1-tune
+omarchy restart shell
 ```
 
-### On the bar, or on a key
+### The bar button, or a key
 
-A bar button for the Omarchy shell ships with the package (`make install-user` copies it
-for you):
+The bar icon shows the camera's state the way the macOS menu bar icon does: normal when the
+camera is ready, dimmed when it isn't (unplugged, starting, or C1 Tune not running), and the
+bar's alert colour when something needs doing (not responding, no USB permission, no
+firmware). The tooltip says which. A click opens the panel as a popover under the icon; a
+click anywhere else, `Esc`, or a second click on the icon closes it.
 
-```bash
-mkdir -p ~/.config/omarchy/plugins
-cp -r /usr/share/c1-tune/bar-widget ~/.config/omarchy/plugins/com.ryankirkman.c1-tune
-omarchy plugin enable com.ryankirkman.c1-tune     # run it again if it says the plugin is unknown
-```
+It polls nothing: C1 Tune writes its status to `$XDG_RUNTIME_DIR/c1-tune.state` when it
+changes and the button watches that file.
 
-Or bind a key in `~/.config/hypr/bindings.lua` (pick one that's free on your setup):
+To open the panel from the keyboard instead, bind a key in `~/.config/hypr/bindings.lua`
+(pick one that's free on your setup). Opened this way it appears in the middle of the screen:
 
 ```lua
 o.bind("SUPER + ALT + C", "C1 Tune", "c1-tune --panel")
 ```
 
-Either one opens the panel, and closes it if it's already open.
-
-The bar icon shows the camera's state the way the macOS menu bar icon does: normal when the
-camera is ready, dimmed when it isn't (unplugged, starting, or C1 Tune not running), and the
-bar's alert colour when something needs doing (not responding, no USB permission, no
-firmware). The tooltip says which. It polls nothing: C1 Tune writes its status to
-`$XDG_RUNTIME_DIR/c1-tune.state` when it changes and the button watches that file. After
-updating the button's files, `omarchy restart shell` loads them.
+Logs go to the journal: `journalctl -t c1-tune`.
 
 ## Controls
 
@@ -235,9 +239,10 @@ What's different is the Linux side:
 | macOS | Here |
 |---|---|
 | IOKit | usbfs (`/dev/bus/usb`) ioctls, no libusb |
+| Re-checking the camera on wake (`NSWorkspace.didWake`) | A timer that fires when the wall clock jumps, which a resume causes; no D-Bus |
 | Polling for the camera every 1.5 s | udev's netlink broadcasts: the app sleeps until a device arrives or leaves |
 | CoreMediaIO "is running somewhere" | inotify on the camera's `/dev/video*` node: an app opening it triggers the re-send |
-| Menu bar popover (AppKit) | A separate Qt Quick panel that follows the Omarchy theme, talking to the app over a Unix socket |
+| Menu bar popover (AppKit) | A separate Qt Quick panel (a layer-shell popover) that follows the Omarchy theme, talking to the app over a Unix socket |
 | Opal Composer's firmware and tuning | Luxonis's firmware download; optional tuning file |
 | Login item | An XDG autostart entry (`~/.config/autostart/c1-tune.desktop`) |
 | `disable-opal.sh` | Not needed: nothing else on Linux claims the camera |
@@ -257,7 +262,8 @@ every half second, which the camera requires). The panel exists only while it's 
 | `src/firmware.*` | Firmware download and pinning, tuning file lookup |
 | `src/main.cpp` | The app's event loop, its socket, and the command line |
 | `panel/` | The control panel |
-| `bar-widget/` | A button for the Omarchy bar |
+| `manifest.json`, `bar-widget/` | The Omarchy plugin: a button for the bar |
+| `packaging/aur/` | The PKGBUILD that builds from a tagged release |
 | `tests/` | Protocol tests (`make test`), and under `tests/ui/` the tools for clicking through the real panel |
 | `scripts/fetch-opal-tuning` | Gets Opal's tuning files from Opal's installer |
 | `pkgbuild/` | Arch package, udev rule, WirePlumber rule, launcher entry, icon |

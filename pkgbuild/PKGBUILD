@@ -35,5 +35,6 @@ package() {
   install -Dm644 "$startdir/c1-tune.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/c1-tune.svg"
   install -Dm644 "$startdir/c1-tune.desktop" "$pkgdir/usr/share/applications/c1-tune.desktop"
   install -Dm755 scripts/fetch-opal-tuning "$pkgdir/usr/share/c1-tune/fetch-opal-tuning"
-  install -Dm644 -t "$pkgdir/usr/share/c1-tune/bar-widget" bar-widget/manifest.json bar-widget/BarWidget.qml
+  install -Dm644 manifest.json "$pkgdir/usr/share/c1-tune/plugin/manifest.json"
+  install -Dm644 bar-widget/BarWidget.qml "$pkgdir/usr/share/c1-tune/plugin/bar-widget/BarWidget.qml"
 }

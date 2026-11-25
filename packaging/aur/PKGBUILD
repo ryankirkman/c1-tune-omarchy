@@ -1,0 +1,40 @@
+# Maintainer: Ryan Kirkman
+# Builds C1 Tune from a tagged release. (pkgbuild/PKGBUILD builds from a checkout.)
+pkgname=c1-tune
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Hardware controls for the Opal C1 webcam: exposure, focus, white balance, zoom'
+arch=('x86_64' 'aarch64')
+url='https://github.com/ryankirkman/c1-tune-omarchy'
+license=('MIT')
+depends=('gcc-libs' 'qt6-base' 'qt6-declarative' 'qt6-wayland' 'layer-shell-qt' 'curl' 'libarchive')
+optdepends=('qt6-multimedia: live preview in the control panel'
+            "python: c1-tune --fetch-tuning (Opal's image tuning)")
+makedepends=('gcc' 'make')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')   # replaced with the release tarball's checksum when a version is tagged
+
+build() {
+  cd "c1-tune-omarchy-$pkgver"
+  make COMMIT="v$pkgver"
+}
+
+check() {
+  cd "c1-tune-omarchy-$pkgver"
+  make test COMMIT="v$pkgver"
+}
+
+package() {
+  cd "c1-tune-omarchy-$pkgver"
+  install -Dm755 build/c1-tune "$pkgdir/usr/bin/c1-tune"
+  install -Dm755 build/c1-tune-panel "$pkgdir/usr/bin/c1-tune-panel"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 pkgbuild/70-opal-c1.rules "$pkgdir/usr/lib/udev/rules.d/70-opal-c1.rules"
+  install -Dm644 pkgbuild/opal-c1-no-suspend.conf "$pkgdir/usr/share/wireplumber/wireplumber.conf.d/opal-c1-no-suspend.conf"
+  install -Dm644 pkgbuild/c1-tune.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/c1-tune.svg"
+  install -Dm644 pkgbuild/c1-tune.desktop "$pkgdir/usr/share/applications/c1-tune.desktop"
+  install -Dm755 scripts/fetch-opal-tuning "$pkgdir/usr/share/c1-tune/fetch-opal-tuning"
+  install -Dm644 manifest.json "$pkgdir/usr/share/c1-tune/plugin/manifest.json"
+  install -Dm644 bar-widget/BarWidget.qml "$pkgdir/usr/share/c1-tune/plugin/bar-widget/BarWidget.qml"
+}

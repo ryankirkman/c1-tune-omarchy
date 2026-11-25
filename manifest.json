@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "com.ryankirkman.c1-tune",
+  "name": "C1 Tune",
+  "version": "0.1.0",
+  "author": "Ryan Kirkman",
+  "license": "MIT",
+  "description": "Bar button for C1 Tune: shows the Opal C1 webcam's state and opens its controls",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "bar-widget/BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "C1 Tune",
+    "description": "Shows the Opal C1 webcam's state and opens its controls",
+    "category": "Video",
+    "allowMultiple": false
+  },
+  "homepage": "https://github.com/ryankirkman/c1-tune-omarchy"
+}
