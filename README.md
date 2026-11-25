@@ -4,14 +4,19 @@ A small, fast tool for the **Opal C1** webcam on [Omarchy](https://omarchy.org) 
 Hyprland): real hardware controls, applied by the camera itself, and nothing else. A port of
 [C1 Tune for macOS](https://github.com/ryankirkman/c1-tune).
 
-- **Fast.** MEASURED_STARTUP
+<p align="center">
+  <img src="docs/screenshot.png" width="340" alt="The C1 Tune panel: sliders for exposure, focus, white balance, zoom, framing and image settings">
+</p>
+
+- **Fast.** A 1080p30 webcam about 3 seconds after the camera's bootloader appears on USB;
+  reattaches to a running camera in under a tenth of a second. Idles at 0% CPU
+  (see [Measured](#measured)).
 - **Real controls.** Exposure, focus, white balance, color, and zoom up to 2× without
   upscaling. The camera shows up as a plain UVC webcam to every app.
 - **Lightweight.** The app that stays running is one ~380 KB binary linking only libc and
   libstdc++. No virtual camera, no PipeWire nodes, no services, no polling.
 - **Safe.** Nothing is ever written to the camera's flash; unplugging it restores factory
-  behaviour. If the app quits, the camera drops back to its factory webcam mode within a
-  couple of seconds.
+  behaviour, and so does quitting C1 Tune (about 10 seconds).
 
 Not affiliated with or endorsed by Opal Camera.
 
@@ -28,6 +33,7 @@ lets you (not just root) talk to the camera. Then open **C1 Tune** from the laun
 camera connects or an app starts using it.
 
 The first start downloads the camera's firmware from Luxonis (8 MB, once, SHA-256 pinned).
+For Opal's own picture, also run `c1-tune --fetch-tuning` once (see [Tuning](#tuning)).
 
 To run from the build directory instead, install just the udev rule:
 
@@ -87,36 +93,88 @@ whiteBalanceK brightness contrast saturation sharpness noiseReduction colorNoise
 antiFlicker zoom frameX frameY flipped microphone tuningFile`
 
 `default` clears sharpness or a denoise value back to the tuning's own. `c1-tune --help`
-lists the other commands (`--reset`, `--retry`, `--quit`).
+lists the other commands (`--reset`, `--restart`, `--retry`, `--quit`).
 
-## Tuning file
+## Tuning
 
 On macOS, C1 Tune uses the image tuning that ships inside Opal Composer. Opal Composer
-doesn't exist on Linux and its files can't be redistributed, so here the camera runs on
-**the firmware's own tuning** unless you bring Opal's over from a Mac:
+doesn't exist on Linux and its files can't be redistributed, so out of the box the camera
+runs on **the firmware's own tuning**. To use Opal's:
 
 ```bash
-# on the Mac
-scp "/Applications/Opal Composer.app/Contents/XPCServices/OpalCameraDeviceService.xpc/Contents/Resources/Opal_v0.12.bin" you@linux:~/.config/c1-tune/
+c1-tune --fetch-tuning
 ```
 
-A file with that name in `~/.config/c1-tune/` is picked up on the next camera start
-(`Opal582_v2.bin` for the IMX582 revision). Or point at a file anywhere:
+This downloads Opal Composer 1.0.1 from Opal's own server (100 MB, once, SHA-256 pinned),
+copies the two tuning files out of the disk image into `~/.config/c1-tune/`, and restarts the
+camera. Nothing from the download is installed or run. It needs `python`; the unpacking is a
+short script (`scripts/fetch-opal-tuning`) using only the standard library.
+
+`Opal_v0.12.bin` (IMX378) or `Opal582_v2.bin` (IMX582) in `~/.config/c1-tune/` is picked up
+by name on every camera start; a copy from a Mac works the same. To use a tuning file kept
+somewhere else:
 
 ```bash
-c1-tune --set tuningFile=/path/to/Opal_v0.12.bin     # tuningFile=default to stop using it
+c1-tune --set tuningFile=/path/to/Opal_v0.12.bin     # tuningFile=default to stop
 ```
 
-The defaults (bias −1, saturation +1, sharpness 3) were chosen on top of Opal's tuning, so
-expect to adjust them without it.
+The defaults (bias −1, saturation +1, sharpness 3) were chosen on top of Opal's tuning.
+With the firmware's own, colors are a little warmer and more saturated and the picture
+sharper; adjust to taste.
+
+## Measured
+
+On an IMX378 Opal C1 behind a USB 3 hub, Omarchy on x86-64, three runs each:
+
+| | |
+|---|---|
+| Camera's bootloader appears → ready (the plug-in path) | 2.95 s |
+| …→ first video frame in an app | 3.1 s |
+| App launched with the camera in factory mode → ready | 3.6–3.7 s |
+| Zoom/flip/microphone restart, after the 1 s it waits for more changes | 4.0 s |
+| App relaunched while the camera is running → ready | 0.03–0.09 s |
+| Panel window on screen after `c1-tune --panel` | 0.23 s |
+| CPU, camera ready and idle | 3.8 ms per 30 s (0.013% of a core) |
+| CPU, while another app streams | 0.02% of a core |
+| Memory, the app | 7 MB resident, 3 MB of its own |
+
+Of the 2.95 s, about 1.5 s is the bootloader dropping to the boot ROM, 0.9 s the 25 MB
+firmware upload at USB 2 speed (the boot ROM doesn't do USB 3), and 0.5 s the firmware
+starting. The app's own share is under a tenth of a second.
 
 ## How it works
 
 The [macOS README](https://github.com/ryankirkman/c1-tune#how-it-works) explains the camera
 side: reboot to the bootloader, drop to the USB boot ROM, upload DepthAI firmware to RAM,
 start a pipeline over RPC, and send every setting as a `CameraControl` message. This port
-sends the camera exactly the same bytes in the same order; `make test` checks the encoders
-against the same reference fixtures, byte for byte.
+sends the camera the same bytes in the same order; `make test` checks the encoders against
+the same reference fixtures, byte for byte.
+
+<details>
+<summary>What testing on Linux added (and the code relies on)</summary>
+
+- **Hold the bootloader link open until the boot ROM appears.** Closing it right after the
+  `USB_ROM_BOOT` write is acknowledged (which Linux does in under a millisecond) makes the
+  bootloader ignore the command and restart itself. The link is now closed once the camera
+  has left the bus.
+- **The factory app is recognized without asking it.** It reports USB device version 2.00;
+  the DepthAI firmware 3.20. Opal's app answers an XLink ping only by timing out after 2 s,
+  so when the version says it's Opal's, the ping is skipped. Everything from the reboot
+  request on is unchanged.
+- **The firmware says when video starts.** It prints `UvcDevice_Start` on its log stream,
+  and logs "Skipping command … for Non active camera" for controls sent while idle, which
+  confirms why settings are re-sent at that moment. A session that reattached to a running
+  camera gets no log stream, so an app opening `/dev/video*` (inotify) triggers the re-send
+  as well.
+- **The camera's watchdog only resets it if no app has streamed since boot.** After any
+  video stream it keeps running unattended when its host goes away. So quitting C1 Tune
+  sends the reboot request itself, and the camera's bootloader, with nobody talking to it,
+  starts the factory app. If C1 Tune is killed instead, the camera may keep running its last
+  pipeline until it is unplugged or C1 Tune starts again (and reattaches).
+- **Microphone off means no audio at all on Linux.** The mic still appears (as "Opal C1"),
+  but a recorder gets no samples and waits, rather than recording silence.
+- **Every app gets 1920×1080 NV12 at 30 fps**, and nothing else is advertised.
+</details>
 
 What's different is the Linux side:
 
@@ -146,6 +204,7 @@ every half second, which the camera requires). The panel exists only while it's 
 | `src/main.cpp` | The app's event loop, its socket, and the command line |
 | `panel/` | The control panel |
 | `bar-widget/` | A button for the Omarchy bar |
+| `scripts/fetch-opal-tuning` | Gets Opal's tuning files from Opal's installer |
 | `pkgbuild/` | Arch package, udev rule, launcher entry, icon |
 
 Files: settings in `~/.config/c1-tune/settings.json`, firmware in `~/.local/share/c1-tune/`.
@@ -161,3 +220,13 @@ Files: settings in `~/.config/c1-tune/settings.json`, firmware in `~/.local/shar
 
 Uninstall with `sudo pacman -R c1-tune`; settings and the cached firmware are the two
 directories above.
+
+## Limitations
+
+- **Tested on one camera**: an IMX378 Opal C1 on one Omarchy machine. The IMX582 revision's
+  tuning is picked automatically but untested.
+- **English only.** The panel's strings are marked for translation but no catalogs ship yet.
+- **No live readout of auto values**, and **zoom restarts the camera**, as on macOS.
+- **The microphone can't be hidden**, and its gain is fixed, as on macOS.
+- If the camera hangs off a monitor's USB hub, it disappears when the monitor sleeps. C1 Tune
+  picks it up again when it returns.

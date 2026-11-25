@@ -55,6 +55,11 @@ std::optional<USB::Device> USB::find(OpalPID pid) {
     return found;
 }
 
+std::string USB::deviceVersion(OpalPID pid) {
+    auto device = find(pid);
+    return device ? readLine(device->sysfs + "/bcdDevice") : "";
+}
+
 bool USB::lacksPermission(OpalPID pid) {
     auto device = find(pid);
     return device && access(device->node.c_str(), R_OK | W_OK) != 0 && errno == EACCES;

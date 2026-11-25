@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 #include <sys/timerfd.h>
 #include <sys/un.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
 
@@ -103,6 +104,7 @@ public:
             }
         }
         unlink(socketPath().c_str());
+        session_.releaseCamera();
         return 0;
     }
 
@@ -220,6 +222,13 @@ private:
         } else if (verb == "reset") {
             reset();
             reply(fd, "ok\n");
+        } else if (verb == "restart") {
+            itimerspec never{};
+            timerfd_settime(restartTimer_, 0, &never, nullptr);
+            restartPending_ = false;
+            session_.restart(settings_);
+            reply(fd, "ok\n");
+            broadcast();
         } else if (verb == "retry") {
             session_.poke();
             reply(fd, "ok\n");
@@ -337,6 +346,8 @@ int usage(FILE *out) {
           "  c1-tune --status            print the app's state and settings as JSON\n"
           "  c1-tune --reset             back to the default settings\n"
           "  c1-tune --retry             look for the camera again after a failure\n"
+          "  c1-tune --restart           restart the camera's pipeline\n"
+          "  c1-tune --fetch-tuning      download Opal's image tuning from Opal (once) and use it\n"
           "  c1-tune --quit              stop the app (the camera returns to its factory webcam mode)\n"
           "  c1-tune --verbose           run the app, logging the camera's own messages too\n\n"
           "Keys: autoExposure exposureUs iso exposureCompensation autoFocus lensPosition autoWhiteBalance\n"
@@ -366,6 +377,22 @@ int main(int argc, char **argv) {
     if (mode == "--status") return request("get", true);
     if (mode == "--reset") return request("reset", false);
     if (mode == "--retry") return request("retry", false);
+    if (mode == "--restart") return request("restart", false);
+    if (mode == "--fetch-tuning") {
+        // Installed beside the app's data; in a checkout, under scripts/.
+        for (std::string script : {std::string("/usr/share/c1-tune/fetch-opal-tuning"), siblingPath("../scripts/fetch-opal-tuning")}) {
+            if (access(script.c_str(), X_OK) != 0) continue;
+            pid_t child = fork();
+            if (child == 0) { execl(script.c_str(), script.c_str(), nullptr); _exit(127); }
+            int status = 0;
+            waitpid(child, &status, 0);
+            if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) return 1;
+            if (int fd = connectToApp(); fd >= 0) { close(fd); return request("restart", false); }
+            return 0;
+        }
+        fprintf(stderr, "fetch-opal-tuning isn't installed.\n");
+        return 1;
+    }
     if (mode == "--quit") return request("quit", false);
     if (mode == "--panel") {
         ensureAppRunning();

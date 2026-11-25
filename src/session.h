@@ -51,6 +51,10 @@ public:
     /// flip, microphone, or returning sharpness and denoise to the tuning's defaults).
     void restart(const CameraSettings &settings);
 
+    /// Makes the destructor send the camera back to its factory webcam mode (for a
+    /// deliberate quit, as opposed to the app being killed).
+    void releaseCamera();
+
 private:
     using Clock = std::chrono::steady_clock;
     struct StartError { std::string message; };
@@ -82,6 +86,7 @@ private:
     std::mutex queueLock_;
     std::multimap<Clock::time_point, std::function<void()>> queue_;   // guarded by queueLock_
     bool stopping_ = false;                                          // guarded by queueLock_
+    bool releaseOnExit_ = false;                                     // guarded by queueLock_
 
     // Everything below is used on the session thread only.
     std::unique_ptr<XLinkConnection> link_;
@@ -91,6 +96,7 @@ private:
     std::optional<Status> lastStatus_;
     int failures_ = 0;
     Clock::time_point retryAfter_{};
+    Clock::time_point expectedBack_{};
     bool wasPresent_ = false;
     Clock::time_point lastOpen_{};
     std::vector<int> videoWatches_;

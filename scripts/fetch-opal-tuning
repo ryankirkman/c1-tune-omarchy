@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""Fetches Opal's image tuning for the C1 into ~/.config/c1-tune.
+
+The tuning files ship inside Opal Composer for macOS and can't be redistributed, so this
+downloads Opal Composer 1.0.1 from Opal's own server (100 MB), checks it is the release this
+was written against, and copies the two tuning files out of the disk image. Nothing is
+installed or run from it. Standard library only; `c1-tune --fetch-tuning` runs this.
+"""
+import bz2, hashlib, lzma, mmap, os, plistlib, struct, subprocess, sys, tempfile, zlib
+
+URL = "https://updates.opal.camera/release/Opal_Composer_1.0.1_3.dmg"
+DMG_SHA256 = "25f3301be12d77163a194fbbe1ff0c763b90946480035c111ec8d45d6167e2e2"
+FILES = {   # name → SHA-256
+    "Opal_v0.12.bin": "8c723046f982093b473345ebf02d38a652995b78bd985a0cc224a6cd3a0d22e1",    # IMX378
+    "Opal582_v2.bin": "f41c80032c262d69631be3a0f41264138a335e1948882b3c1bf5d9270a6e95d6",    # IMX582
+}
+
+
+def sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def unpack_udif(dmg, raw):
+    """A .dmg is a UDIF image: a trailer pointing at a plist that lists compressed chunks."""
+    with open(dmg, "rb") as f, open(raw, "wb") as out:
+        f.seek(-512, 2)
+        koly = f.read(512)
+        if koly[:4] != b"koly":
+            raise SystemExit("That isn't a disk image.")
+        xml_offset, xml_length = struct.unpack(">QQ", koly[216:232])
+        f.seek(xml_offset)
+        for entry in plistlib.loads(f.read(xml_length))["resource-fork"]["blkx"]:
+            table = entry["Data"]
+            first_sector, _, data_offset = struct.unpack(">QQQ", table[8:32])
+            for i in range(struct.unpack(">I", table[200:204])[0]):
+                kind, _, sector, _, offset, length = struct.unpack(">IIQQQQ", table[204 + 40 * i:244 + 40 * i])
+                if kind in (0, 2, 0x7FFFFFFE, 0xFFFFFFFF):   # zero-fill, comment, end
+                    continue
+                f.seek(data_offset + offset)
+                data = f.read(length)
+                if kind == 0x80000005: data = zlib.decompress(data)
+                elif kind == 0x80000006: data = bz2.decompress(data)
+                elif kind == 0x80000008: data = lzma.decompress(data)
+                elif kind != 1: raise SystemExit("Unsupported disk image compression (%x)." % kind)
+                out.seek((first_sector + sector) * 512)
+                out.write(data)
+
+
+def hfs_file(image, name):
+    """Finds `name`'s record in the HFS+ catalog and reads its data fork (up to 8 extents)."""
+    signature = image.find(b"H+\x00\x04")
+    if signature < 0:
+        raise SystemExit("No HFS+ volume in the disk image.")
+    volume = signature - 1024
+    block = struct.unpack(">I", image[signature + 40:signature + 44])[0]
+    key, position = name.encode("utf-16-be"), 0
+    while True:
+        i = image.find(key, position)
+        if i < 0:
+            return None
+        position = i + 2
+        if struct.unpack(">H", image[i - 2:i])[0] != len(name):
+            continue
+        record = i - 6 + struct.unpack(">H", image[i - 8:i - 6])[0]
+        if struct.unpack(">H", image[record:record + 2])[0] != 2:   # 2 = a file
+            continue
+        fork = record + 88
+        size = struct.unpack(">Q", image[fork:fork + 8])[0]
+        data = b""
+        for e in range(8):
+            start, count = struct.unpack(">II", image[fork + 16 + 8 * e:fork + 24 + 8 * e])
+            data += image[volume + start * block:volume + (start + count) * block]
+        return data[:size] if len(data) >= size else None
+
+
+def main():
+    config = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "c1-tune")
+    os.makedirs(config, exist_ok=True)
+    if all(os.path.exists(os.path.join(config, n)) and sha256(os.path.join(config, n)) == h for n, h in FILES.items()):
+        print("Opal's tuning files are already in " + config)
+        return
+    with tempfile.TemporaryDirectory(prefix="c1-tune-") as work:
+        dmg, raw = os.path.join(work, "composer.dmg"), os.path.join(work, "composer.img")
+        print("Downloading Opal Composer 1.0.1 from Opal (100 MB)…")
+        if subprocess.run(["curl", "-fL", "--progress-bar", "--connect-timeout", "15", "-o", dmg, URL]).returncode != 0:
+            raise SystemExit("Download failed.")
+        if sha256(dmg) != DMG_SHA256:
+            raise SystemExit("That isn't the Opal Composer 1.0.1 this was written against; not using it.")
+        print("Unpacking…")
+        unpack_udif(dmg, raw)
+        with open(raw, "rb") as f:
+            image = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+            for name, digest in FILES.items():
+                data = hfs_file(image, name)
+                if data is None or hashlib.sha256(data).hexdigest() != digest:
+                    raise SystemExit("Couldn't read %s from the disk image." % name)
+                target = os.path.join(config, name)
+                with open(target + ".tmp", "wb") as out:
+                    out.write(data)
+                os.replace(target + ".tmp", target)
+                print("  " + target)
+            image.close()
+    print("Done. The camera uses it from its next start (c1-tune --restart).")
+
+
+if __name__ == "__main__":
+    main()

@@ -22,6 +22,9 @@ std::string printable(const Bytes &bytes, size_t from) {
     return out;
 }
 
+// bcdDevice of the standalone app in the camera's flash (ours, Luxonis's build, is 0320).
+const char *standaloneVersion = "0200";
+
 const char *udevHint = "No USB access to the camera. Install the udev rule (see the README), then replug or press Retry.";
 }
 
@@ -36,7 +39,12 @@ Session::~Session() {
     uint64_t one = 1;
     (void)!write(wakeFd_, &one, sizeof one);
     if (thread_.joinable()) thread_.join();
+    bool release = releaseOnExit_ && link_ != nullptr;
     link_.reset();
+    // Quitting hands the camera back: reboot it, and with nobody talking to its bootloader
+    // it starts the factory webcam app from flash. (Left alone, the firmware only resets
+    // itself if no app has streamed video since it booted; otherwise it runs on unattended.)
+    if (release) USB::rebootToBootloader();
     close(wakeFd_);
     close(inotifyFd_);
 }
@@ -75,8 +83,16 @@ void Session::restart(const CameraSettings &settings) {
         // for the standalone app to boot first (≈14 s).
         USB::rebootToBootloader();
         retryAfter_ = Clock::now() + seconds(0.5);
+        // The camera is off the bus for a moment between boot stages; that isn't "unplugged".
+        expectedBack_ = Clock::now() + seconds(6);
         post([this] { tick(); }, 0.5);
+        post([this] { tick(); }, 6.1);
     });
+}
+
+void Session::releaseCamera() {
+    std::lock_guard guard(queueLock_);
+    releaseOnExit_ = true;
 }
 
 // MARK: - Thread
@@ -141,11 +157,11 @@ void Session::watchVideoNodes() {
     }
 }
 
-/// An app just opened the webcam. The camera drops control messages while its sensor
-/// is idle, so send every setting again once it's running.
+/// An app just opened the webcam or started its stream. The camera drops control messages
+/// while its sensor is idle, so send every setting again once it's running.
 void Session::streamStarted() {
     auto now = Clock::now();
-    if (now - lastOpen_ < seconds(0.25)) return;   // one app opening the node several times
+    if (now - lastOpen_ < seconds(1)) return;   // the open and the stream start of one app, or several opens
     lastOpen_ = now;
     for (double delay : {0.8, 2.5}) {
         post([this] {
@@ -190,8 +206,8 @@ void Session::tick() {
     if (present && !wasPresent_) { failures_ = 0; retryAfter_ = {}; }   // plugged in: start over
     wasPresent_ = present;
     auto now = Clock::now();
-    if (!present && now >= retryAfter_) {
-        report({Status::notConnected, "Not connected"});
+    if (!present) {
+        if (now >= retryAfter_ && now >= expectedBack_) report({Status::notConnected, "Not connected"});
         return;
     }
     if (failures_ >= maxFailures) return;
@@ -255,13 +271,24 @@ template <typename Open> auto Session::retrying(const char *message, int attempt
 }
 
 void Session::connect() {
-    XLinkConnection::Log logDevice = [this](const std::string &text) { if (verbose_) logLine("device: %s", text.c_str()); };
+    auto began = Clock::now();
+    auto step = [&](const char *what) {
+        if (verbose_) logLine("+%.2f s: %s", std::chrono::duration<double>(Clock::now() - began).count(), what);
+    };
+    XLinkConnection::Log logDevice = [this](const std::string &text) {
+        if (verbose_) logLine("device: %.1500s", text.c_str());
+        // The firmware prints this the moment a host starts the video stream: the exact
+        // signal the settings need re-sending on (called on the link's reader thread).
+        if (text.find("UvcDevice_Start") != std::string::npos) post([this] { streamStarted(); });
+    };
     // Called on a link thread when the link drops on its own: wake the session to notice.
     auto onDeath = [this] { post([this] { tick(); }); };
     using Error = XLinkConnection::ConnectError;
 
-    if (USB::isPresent(OpalPID::booted)) {
-        // Our firmware answers XLink; Opal's standalone app doesn't accept the first write.
+    // Our firmware answers XLink; Opal's standalone app doesn't accept the first write, but
+    // only says so by letting it time out after 2 s. The two report different device
+    // versions over USB, so when it clearly isn't our firmware, skip asking.
+    if (USB::isPresent(OpalPID::booted) && USB::deviceVersion(OpalPID::booted) != standaloneVersion) {
         Error error;
         auto existing = XLinkConnection::connect(OpalPID::booted, error, 3, logDevice, onDeath);
         if (!existing && error == Error::noAnswer) existing = XLinkConnection::connect(OpalPID::booted, error, 3, logDevice, onDeath);
@@ -285,22 +312,31 @@ void Session::connect() {
     Bytes firmware = Firmware::load(firmwareError);
     if (firmware.empty()) throw StartError{firmwareError};
     BootImage::patchFrameSizes(firmware);
+    step("firmware loaded");
 
     if (USB::isPresent(OpalPID::booted)) {
         USB::rebootToBootloader();
+        step("asked the camera to reboot to its bootloader");
         if (!monitor_.wait(OpalPID::bootloader, 6)) throw StartError{"The camera didn't restart into its bootloader."};
     }
     if (USB::isPresent(OpalPID::bootloader)) {
+        step("bootloader present");
         auto bootloader = retrying("Couldn't talk to the camera's bootloader.", 12, [] {
             Error error;
             return XLinkConnection::connect(OpalPID::bootloader, error);
         });
-        if (auto watchdog = bootloader->open("__watchdog", 64)) bootloader->write(*watchdog, {0, 0, 0, 0}, 1);   // keepalive
-        if (auto stream = bootloader->open("__bootloader", 5 << 20)) bootloader->write(*stream, {0, 0, 0, 0}, 2);  // USB_ROM_BOOT
+        step("bootloader answered");
+        auto watchdog = bootloader->open("__watchdog", 64);
+        if (watchdog) bootloader->write(*watchdog, {0, 0, 0, 0}, 1);   // keepalive
+        auto stream = bootloader->open("__bootloader", 5 << 20);
+        bool asked = stream && bootloader->write(*stream, {0, 0, 0, 0}, 2);  // USB_ROM_BOOT
+        if (verbose_) logLine("bootloader: watchdog %s, USB_ROM_BOOT %s", watchdog ? "open" : "refused", asked ? "sent" : stream ? "not acknowledged" : "stream refused");
+        bool rom = monitor_.wait(OpalPID::rom, 6);
         bootloader->close();
-        if (!monitor_.wait(OpalPID::rom, 6)) throw StartError{"The camera didn't enter USB boot mode."};
+        if (!rom) throw StartError{"The camera didn't enter USB boot mode."};
     }
     if (USB::isPresent(OpalPID::rom)) {
+        step("boot ROM present");
         auto rom = retrying("Couldn't open the camera in USB boot mode.", 12, [] {
             USBPipe::OpenError error;
             return USBPipe::open(OpalPID::rom, error);
@@ -308,12 +344,14 @@ void Session::connect() {
         // Default watchdog (fed from our keepalive thread); 0 makes the firmware reset when video starts.
         upload(BootImage::image(firmware, BootImage::boardConfig(std::nullopt, true)), *rom);
         rom->close();
+        step("firmware uploaded");
         if (!monitor_.wait(OpalPID::booted, 10)) throw StartError{"The camera didn't come back after loading firmware."};
     }
     auto connection = retrying("Couldn't connect to the camera after loading firmware.", 20, [&] {
         Error error;
         return XLinkConnection::connect(OpalPID::booted, error, 3, logDevice, onDeath);
     });
+    step("firmware answered");
     attach(std::move(connection), true);
 }
 

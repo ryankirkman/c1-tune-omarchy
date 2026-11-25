@@ -8,7 +8,8 @@ license=('MIT')
 # The app itself needs only libc and libstdc++. Qt is for the control panel; curl and
 # bsdtar (libarchive) fetch and unpack the camera's firmware once.
 depends=('gcc-libs' 'qt6-base' 'qt6-declarative' 'qt6-wayland' 'curl' 'libarchive')
-optdepends=('qt6-multimedia: live preview in the control panel')
+optdepends=('qt6-multimedia: live preview in the control panel'
+            "python: c1-tune --fetch-tuning (Opal's image tuning)")
 makedepends=('gcc' 'make')
 source=()
 sha256sums=()
@@ -32,5 +33,6 @@ package() {
   install -Dm644 "$startdir/70-opal-c1.rules" "$pkgdir/usr/lib/udev/rules.d/70-opal-c1.rules"
   install -Dm644 "$startdir/c1-tune.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/c1-tune.svg"
   install -Dm644 "$startdir/c1-tune.desktop" "$pkgdir/usr/share/applications/c1-tune.desktop"
+  install -Dm755 scripts/fetch-opal-tuning "$pkgdir/usr/share/c1-tune/fetch-opal-tuning"
   install -Dm644 -t "$pkgdir/usr/share/c1-tune/bar-widget" bar-widget/manifest.json bar-widget/BarWidget.qml
 }

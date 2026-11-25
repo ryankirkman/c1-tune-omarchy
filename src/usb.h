@@ -28,6 +28,9 @@ struct Device {
 std::optional<Device> find(OpalPID pid);
 inline bool isPresent(OpalPID pid) { return find(pid).has_value(); }
 
+/// The device's bcdDevice as sysfs prints it ("0320"), or empty.
+std::string deviceVersion(OpalPID pid);
+
 /// True when the device is there but its node isn't writable: the udev rule is missing.
 bool lacksPermission(OpalPID pid);
 
