@@ -148,6 +148,9 @@ both are handled:
   including 18 across the 4.7–5.4 s range that hung it, and four WirePlumber restarts with
   the microphone in use, without a hang.
 
+Restarting or quitting with the microphone in use is covered too (10 restarts and 4
+quit-and-reopen cycles, each straight after a recording).
+
 What is **not** protected: a program that bypasses PipeWire and opens and closes the ALSA
 device itself in rapid succession (fifteen record start/kill cycles a quarter of a second
 apart hung it). Nothing ordinary does that. If the camera does hang, C1 Tune says "The
@@ -166,7 +169,8 @@ On an IMX378 Opal C1 behind a USB 3 hub, Omarchy on x86-64, three runs each:
 | App launched with the camera in factory mode → ready | 3.6–3.7 s |
 | Zoom/flip/microphone restart, after the 1 s it waits for more changes | 4.0 s |
 | App relaunched while the camera is running → ready | 0.03–0.09 s |
-| Quit, then reopened 0.3–12 s later → ready | 2.9–6.6 s |
+| Quit, then reopened 0.3–13 s later → ready | 2.7–5.9 s (up to 7.4 s if the mic was in use) |
+| Restart with the microphone in use | 4.1–4.4 s |
 | Panel window on screen after `c1-tune --panel` | 0.23 s |
 | CPU, camera ready and idle | 3.8 ms per 30 s (0.013% of a core) |
 | CPU, while another app streams | 0.02% of a core |
@@ -210,6 +214,12 @@ the same reference fixtures, byte for byte.
 - **A bootloader that has waited about four seconds ignores the boot-ROM command** and
   starts the factory app. Reopening C1 Tune a few seconds after quitting it lands there, so
   the boot then goes round once more instead of failing.
+- **The kernel can keep a dead USB 3 entry for the camera.** Rebooting the camera while
+  PipeWire has its microphone open (the normal state once the mic has been used) leaves the
+  old device listed for minutes while the camera is really in its bootloader on the USB 2
+  side. C1 Tune tells a re-enumerated camera from that leftover by its device number, never
+  treats a camera that is also showing in another boot stage as running, and clears the
+  leftover with a port reset (which only "works" on a device that has gone).
 - **Every app gets 1920×1080 NV12 at 30 fps**, and nothing else is advertised.
 </details>
 

@@ -385,6 +385,12 @@ void Session::connect(bool secondTry) {
             return bootedPresent() || other;
         }, 6);
         if (!moved) throw StartError{"The camera isn't responding. Unplug it and plug it back in."};
+        // What came back may be a camera we never spoke to: the reset that cleared a stale
+        // entry reveals whatever is really there (usually the factory app). Start again with it.
+        if (!USB::isPresent(OpalPID::bootloader) && !USB::isPresent(OpalPID::rom) && !secondTry) {
+            step("a different camera state appeared; starting over");
+            return connect(true);
+        }
     }
     if (USB::isPresent(OpalPID::bootloader)) {
         step("bootloader present");
@@ -425,7 +431,8 @@ void Session::connect(bool secondTry) {
     }
     auto connection = retrying("Couldn't connect to the camera after loading firmware.", 20, [&] {
         Error error;
-        if (!bootedPresent()) return std::unique_ptr<XLinkConnection>();   // only a ghost so far
+        // Not a ghost, and not the factory app (which only answers by timing out).
+        if (!bootedPresent() || USB::deviceVersion(OpalPID::booted) == standaloneVersion) return std::unique_ptr<XLinkConnection>();
         return XLinkConnection::connect(OpalPID::booted, error, 3, logDevice, onDeath);
     });
     step("firmware answered");
