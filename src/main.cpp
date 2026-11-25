@@ -280,13 +280,15 @@ private:
     }
 
     CameraSettings settings_;
-    Session session_;
     std::mutex statusLock_;
     Session::Status status_{Session::Status::starting, "Looking for the camera…"};   // guarded by statusLock_
     std::map<int, Client> clients_;
     int epoll_ = -1, listenFd_ = -1, statusFd_ = -1, restartTimer_ = -1;
     bool restartPending_ = false;
     bool quit_ = false;
+    // Last, so it is destroyed first: its thread reports status into the members above
+    // until it has stopped, which a quit in the middle of a boot has to wait for.
+    Session session_;
 };
 
 // MARK: - Clients
