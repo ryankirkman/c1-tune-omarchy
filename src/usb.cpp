@@ -96,6 +96,21 @@ std::vector<std::string> USB::videoNodes() {
     return nodes;
 }
 
+std::vector<std::string> USB::audioCaptureNodes() {
+    std::vector<std::string> nodes;
+    const std::string root = "/sys/class/sound";
+    DIR *dir = opendir(root.c_str());
+    if (!dir) return nodes;
+    while (dirent *e = readdir(dir)) {
+        size_t n = strlen(e->d_name);
+        if (strncmp(e->d_name, "pcmC", 4) || e->d_name[n - 1] != 'c') continue;
+        // pcmC1D0c/device is the card, the card's device the USB interface, its parent the camera.
+        if (matches(root + "/" + e->d_name + "/device/device/..", OpalPID::booted)) nodes.push_back(e->d_name);
+    }
+    closedir(dir);
+    return nodes;
+}
+
 // MARK: - Monitor
 
 USBMonitor::USBMonitor() {

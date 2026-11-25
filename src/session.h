@@ -73,6 +73,7 @@ private:
     template <typename Open> auto retrying(const char *message, int attempts, Open open);
     void upload(const Bytes &image, USBPipe &pipe);
     void attach(std::unique_ptr<XLinkConnection> connection, bool freshBoot);
+    void waitForAudioProbe();
     void uploadAsset(const Bytes &blob);
     Bytes call(const std::string &name, const std::vector<MsgPack> &args = {}, const Bytes *raw = nullptr);
 

@@ -387,6 +387,7 @@ void Session::attach(std::unique_ptr<XLinkConnection> connection, bool freshBoot
     }
 
     report({Status::starting, "Configuring camera…"});
+    if (settings_.microphone) waitForAudioProbe();
     Pipeline::Camera camera = settings_.pipelineCamera();
     Bytes sensors;
     try { sensors = call("getCameraSensorNames"); } catch (const StartError &) {}
@@ -404,6 +405,47 @@ void Session::attach(std::unique_ptr<XLinkConnection> connection, bool freshBoot
         throw StartError{"The camera rejected the pipeline: " + printable(built, 6)};
     call("startPipeline");
     controlStream_ = control;
+}
+
+/// The moment the camera's sound card appears, PipeWire opens and closes its capture device
+/// dozens of times within a tenth of a second to probe it. If the pipeline's microphone
+/// node starts in the middle of that, the firmware hangs for good (no video, no USB, until
+/// it is unplugged). macOS doesn't probe this way, so this wait is Linux's alone: hold the
+/// pipeline until the capture device has been left alone for 400 ms. inotify reports the
+/// opens and closes; nothing is polled.
+void Session::waitForAudioProbe() {
+    int fd = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
+    if (fd < 0 || inotify_add_watch(fd, "/dev/snd", IN_OPEN | IN_CLOSE | IN_CREATE) < 0) {
+        if (fd >= 0) close(fd);
+        sleepFor(1.5);   // can't watch: wait out a typical probe instead
+        return;
+    }
+    auto started = Clock::now();
+    auto quietSince = started;
+    int events = 0;
+    while (true) {
+        auto now = Clock::now();
+        if (now - quietSince >= seconds(0.4) || now - started >= seconds(4)) break;
+        pollfd p{fd, POLLIN, 0};
+        int left = int(std::chrono::duration_cast<std::chrono::milliseconds>(seconds(0.4) - (now - quietSince)).count()) + 1;
+        if (poll(&p, 1, left) <= 0) continue;
+        auto ours = USB::audioCaptureNodes();
+        alignas(inotify_event) char buf[4096];
+        ssize_t n;
+        while ((n = read(fd, buf, sizeof buf)) > 0) {
+            for (char *at = buf; at < buf + n;) {
+                auto *event = reinterpret_cast<inotify_event *>(at);
+                at += sizeof(inotify_event) + event->len;
+                if (event->len && std::find(ours.begin(), ours.end(), std::string(event->name)) != ours.end()) {
+                    quietSince = Clock::now();
+                    events++;
+                }
+            }
+        }
+    }
+    close(fd);
+    if (verbose_) logLine("sound card quiet after %.2f s (%d opens and closes)",
+                          std::chrono::duration<double>(Clock::now() - started).count(), events);
 }
 
 /// setAssets → memAlloc → readFromXLink (with the blob on its stream) → setAssetStorage.

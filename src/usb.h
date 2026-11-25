@@ -43,6 +43,9 @@ inline void rebootToBootloader() { deviceRequest(OpalPID::booted, 0x00, 0xF5, 0x
 
 /// /dev/videoN nodes that belong to the booted camera.
 std::vector<std::string> videoNodes();
+
+/// Names of the booted camera's ALSA capture nodes under /dev/snd ("pcmC1D0c").
+std::vector<std::string> audioCaptureNodes();
 }
 
 /// udev's device events (the "udev" netlink group, sent once rules, and so permissions,
