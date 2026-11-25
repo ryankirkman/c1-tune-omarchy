@@ -13,7 +13,7 @@ ApplicationWindow {
     readonly property bool ready: backend.connected && backend.status === "ready"
     readonly property bool failed: backend.connected && backend.status === "failed"
     readonly property int margin: 14
-    // A window that can't be resized is one Hyprland floats, which is what a panel wants.
+    // (As an ordinary window: one that can't be resized is one Hyprland floats.)
     // On a short screen the panel is as tall as fits and scrolls. (C1TUNE_PANEL_MAX_HEIGHT
     // imposes that on any screen, for testing it.)
     readonly property int panelHeight: Math.min(content.implicitHeight + 2 * margin,
@@ -31,7 +31,7 @@ ApplicationWindow {
         return p === 100 ? "1×" : p === 200 ? "2×" : (p / 100).toLocaleString(Qt.locale(), "f", 2) + "×"
     }
 
-    visible: true
+    visible: false   // shown from main(), once it knows where the panel goes
     title: qsTr("C1 Tune")
     width: 340
     height: panelHeight
@@ -49,10 +49,28 @@ ApplicationWindow {
     // Set once here; every control inherits it.
     Material.roundedScale: theme.radius
 
+    // A popover goes away when you click on something else. Not before it has had the
+    // keyboard once, or it would close in the moment before the compositor hands it over.
+    property bool hadFocus: false
+    onActiveChanged: {
+        if (active) hadFocus = true
+        else if (popover && hadFocus) Qt.quit()
+    }
+
     // While the dropdown is open the keys belong to it: Esc closes the list, not the panel.
     Shortcut { sequences: ["Escape", "Q"]; context: Qt.ApplicationShortcut; enabled: !flicker.popup.visible; onActivated: Qt.quit() }
     Shortcut { sequence: "P"; context: Qt.ApplicationShortcut; enabled: !flicker.popup.visible; onActivated: backend.preview = !backend.preview }
     Shortcut { sequence: "R"; context: Qt.ApplicationShortcut; enabled: !flicker.popup.visible; onActivated: if (window.failed) backend.retry() }
+
+    Rectangle {
+        anchors.fill: parent
+        z: 10
+        visible: popover
+        color: "transparent"
+        border.width: 1
+        border.color: theme.muted
+        radius: theme.radius
+    }
 
     Flickable {
         anchors.fill: parent

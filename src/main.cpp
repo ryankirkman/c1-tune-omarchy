@@ -102,7 +102,12 @@ public:
         sigprocmask(SIG_BLOCK, &signals, nullptr);
         signal(SIGPIPE, SIG_IGN);
         int signalFd = signalfd(-1, &signals, SFD_CLOEXEC | SFD_NONBLOCK);
-        for (int fd : {listenFd_, statusFd_, restartTimer_, signalFd}) watch(fd);
+        // Fires when the wall clock jumps, which is what waking from sleep does: the one
+        // way to hear about a resume without asking logind over D-Bus.
+        wakeTimer_ = timerfd_create(CLOCK_REALTIME, TFD_CLOEXEC | TFD_NONBLOCK);
+        armWakeTimer();
+        for (int fd : {listenFd_, statusFd_, restartTimer_, wakeTimer_, signalFd}) watch(fd);
+        logLine("C1 Tune " C1TUNE_VERSION " (" C1TUNE_COMMIT ") started");
         publishState();
 
         session_.start();
@@ -116,6 +121,15 @@ public:
                 if (fd == listenFd_) acceptClient();
                 else if (fd == statusFd_) { drain(fd); publishState(); broadcast(); }
                 else if (fd == restartTimer_) { drain(fd); restartPending_ = false; session_.restart(settings_); broadcast(); }
+                else if (fd == wakeTimer_) {
+                    uint64_t value;
+                    // ECANCELED is the clock having been set; a plain expiry is 30 days on.
+                    if (read(fd, &value, sizeof value) < 0 && errno == ECANCELED) {
+                        logLine("the clock jumped (woke from sleep?): checking the camera");
+                        session_.poke();
+                    }
+                    armWakeTimer();
+                }
                 else if (fd == signalFd) quit_ = true;
                 else readClient(fd);
             }
@@ -153,6 +167,14 @@ private:
         event.events = EPOLLIN;
         event.data.fd = fd;
         epoll_ctl(epoll_, EPOLL_CTL_ADD, fd, &event);
+    }
+
+    void armWakeTimer() {
+        itimerspec when{};
+        timespec now{};
+        clock_gettime(CLOCK_REALTIME, &now);
+        when.it_value.tv_sec = now.tv_sec + 30 * 24 * 3600;
+        timerfd_settime(wakeTimer_, TFD_TIMER_ABSTIME | TFD_TIMER_CANCEL_ON_SET, &when, nullptr);
     }
 
     static void drain(int fd) { uint64_t value; (void)!read(fd, &value, sizeof value); }
@@ -308,7 +330,7 @@ private:
     std::mutex statusLock_;
     Session::Status status_{Session::Status::starting, "Looking for the camera…"};   // guarded by statusLock_
     std::map<int, Client> clients_;
-    int epoll_ = -1, listenFd_ = -1, statusFd_ = -1, restartTimer_ = -1;
+    int epoll_ = -1, listenFd_ = -1, statusFd_ = -1, restartTimer_ = -1, wakeTimer_ = -1;
     bool restartPending_ = false;
     bool quit_ = false;
     // Last, so it is destroyed first: its thread reports status into the members above

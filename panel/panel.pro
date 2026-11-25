@@ -10,3 +10,8 @@ DEFINES += PANEL_VERSION=\\\"$$PANEL_VERSION\\\"
 HEADERS += backend.h theme.h
 SOURCES += main.cpp backend.cpp theme.cpp
 RESOURCES += resources.qrc
+
+# The panel is a layer-shell surface, like the bar's own popups: it can be put exactly under
+# the bar icon and is never tiled. (layer-shell-qt ships with Omarchy.)
+INCLUDEPATH += /usr/include/LayerShellQt
+LIBS += -lLayerShellQtInterface

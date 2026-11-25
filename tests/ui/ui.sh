@@ -5,11 +5,22 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 P=$ROOT/build/ptr
 screen() { hyprctl monitors -j | python3 -c "import json,sys; m=json.load(sys.stdin)[0]; print(int(m['width']/m['scale']), int(m['height']/m['scale']))"; }
 read SW SH <<< "$(screen)"
-win() { hyprctl clients -j | python3 -c "
-import json,sys
-for c in json.load(sys.stdin):
-    if c['class']=='c1-tune': print(c['at'][0],c['at'][1],c['size'][0],c['size'][1])"; }
-open_panel() { [ -z "$(win)" ] && { (c1-tune --panel >/dev/null 2>&1 &); for i in $(seq 1 50); do [ -n "$(win)" ] && break; sleep 0.1; done; sleep 0.6; }; hyprctl dispatch 'hl.dsp.focus({ window = "class:c1-tune" })' >/dev/null 2>&1; }
+# The panel's x y width height. It is a layer surface (a popover), or an ordinary window
+# when run with C1TUNE_PANEL_WINDOW=1.
+win() { python3 - <<'PY'
+import json, subprocess
+def run(*a): return json.loads(subprocess.run(a, capture_output=True, text=True).stdout or 'null')
+for monitor in (run('hyprctl', 'layers', '-j') or {}).values():
+    for level in monitor['levels'].values():
+        for layer in level:
+            if layer['namespace'] == 'c1-tune':
+                print(layer['x'], layer['y'], layer['w'], layer['h']); raise SystemExit
+for c in run('hyprctl', 'clients', '-j') or []:
+    if c['class'] == 'c1-tune':
+        print(c['at'][0], c['at'][1], c['size'][0], c['size'][1]); break
+PY
+}
+open_panel() { [ -z "$(win)" ] && { (c1-tune --panel >/dev/null 2>&1 &); for i in $(seq 1 50); do [ -n "$(win)" ] && break; sleep 0.1; done; sleep 0.6; }; }
 # Rows sit lower when the preview or an error line is showing: measure, don't assume.
 at() { read wx wy ww wh <<< "$(win)"; y=$2; [ $y -gt 40 ] && y=$((y + wh - 786)); echo $((wx+$1)) $((wy+y)); }
 click() { [ -z "$(win)" ] && { echo "  (no panel window: click skipped)"; return; }; read x y <<< "$(at $1 $2)"; $P $SW $SH click $x $y; sleep ${3:-0.35}; }

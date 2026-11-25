@@ -7,7 +7,7 @@ url='https://github.com/ryankirkman/c1-tune-omarchy'
 license=('MIT')
 # The app itself needs only libc and libstdc++. Qt is for the control panel; curl and
 # bsdtar (libarchive) fetch and unpack the camera's firmware once.
-depends=('gcc-libs' 'qt6-base' 'qt6-declarative' 'qt6-wayland' 'curl' 'libarchive')
+depends=('gcc-libs' 'qt6-base' 'qt6-declarative' 'qt6-wayland' 'layer-shell-qt' 'curl' 'libarchive')
 optdepends=('qt6-multimedia: live preview in the control panel'
             "python: c1-tune --fetch-tuning (Opal's image tuning)")
 makedepends=('gcc' 'make')

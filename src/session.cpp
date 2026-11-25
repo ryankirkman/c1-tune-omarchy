@@ -268,7 +268,7 @@ void Session::tick() {
 void Session::report(Status status) {
     if (lastStatus_ && status == *lastStatus_) return;
     lastStatus_ = status;
-    if (verbose_) logLine("status: %s", status.message.c_str());
+    logLine("status: %s", status.message.c_str());
     if (onStatus_) onStatus_(status);
 }
 
