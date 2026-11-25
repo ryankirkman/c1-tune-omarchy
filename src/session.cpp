@@ -274,7 +274,7 @@ template <typename Open> auto Session::retrying(const char *message, int attempt
     throw StartError{message};
 }
 
-void Session::connect() {
+void Session::connect(bool secondTry) {
     auto began = Clock::now();
     auto step = [&](const char *what) {
         if (verbose_) logLine("+%.2f s: %s", std::chrono::duration<double>(Clock::now() - began).count(), what);
@@ -337,9 +337,16 @@ void Session::connect() {
         auto stream = bootloader->open("__bootloader", 5 << 20);
         bool asked = stream && bootloader->write(*stream, {0, 0, 0, 0}, 2);  // USB_ROM_BOOT
         if (verbose_) logLine("bootloader: watchdog %s, USB_ROM_BOOT %s", watchdog ? "open" : "refused", asked ? "sent" : stream ? "not acknowledged" : "stream refused");
-        bool rom = monitor_.wait(OpalPID::rom, 6);
+        auto next = monitor_.waitEither(OpalPID::rom, OpalPID::booted, 6);
         bootloader->close();
-        if (!rom) throw StartError{"The camera didn't enter USB boot mode."};
+        if (next == OpalPID::booted && !secondTry) {
+            // The bootloader had already given up waiting for a host and was on its way to
+            // the factory app when we asked (the app relaunched a few seconds after a quit).
+            // That app is up now, so go round once more from the reboot request.
+            step("the bootloader started the factory app instead; starting over");
+            return connect(true);
+        }
+        if (next != OpalPID::rom) throw StartError{"The camera didn't enter USB boot mode."};
     }
     if (USB::isPresent(OpalPID::rom)) {
         step("boot ROM present");

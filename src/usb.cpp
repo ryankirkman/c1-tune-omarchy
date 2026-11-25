@@ -160,12 +160,17 @@ USBMonitor::Changes USBMonitor::drain() {
 }
 
 bool USBMonitor::wait(OpalPID pid, double timeoutSeconds) {
+    return waitEither(pid, pid, timeoutSeconds).has_value();
+}
+
+std::optional<OpalPID> USBMonitor::waitEither(OpalPID a, OpalPID b, double timeoutSeconds) {
     using clock = std::chrono::steady_clock;
     auto deadline = clock::now() + std::chrono::duration<double>(timeoutSeconds);
     while (true) {
-        if (USB::isPresent(pid)) return true;
+        if (USB::isPresent(a)) return a;
+        if (USB::isPresent(b)) return b;
         auto left = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - clock::now()).count();
-        if (left <= 0) return false;
+        if (left <= 0) return {};
         if (fd_ < 0) { usleep(100000); continue; }   // no netlink: fall back to the original's 100 ms poll
         pollfd p{fd_, POLLIN, 0};
         if (poll(&p, 1, int(left)) > 0) drain();

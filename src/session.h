@@ -69,7 +69,7 @@ private:
     void watchVideoNodes();
     void dropLink();
 
-    void connect();
+    void connect(bool secondTry = false);
     template <typename Open> auto retrying(const char *message, int attempts, Open open);
     void upload(const Bytes &image, USBPipe &pipe);
     void attach(std::unique_ptr<XLinkConnection> connection, bool freshBoot);

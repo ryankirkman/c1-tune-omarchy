@@ -62,6 +62,8 @@ public:
 
     /// Blocks until a device with `pid` is present, without polling. False on timeout.
     bool wait(OpalPID pid, double timeoutSeconds);
+    /// The same for either of two stages; says which one turned up.
+    std::optional<OpalPID> waitEither(OpalPID a, OpalPID b, double timeoutSeconds);
 
 private:
     int fd_ = -1;
