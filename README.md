@@ -25,7 +25,9 @@ Not affiliated with or endorsed by Opal Camera.
 ## Install
 
 Two pieces: the app (an Arch package, because talking to the camera needs a udev rule) and
-the button for the Omarchy bar (an Omarchy plugin).
+the button for the Omarchy bar (an Omarchy plugin, also listed on
+[plugins.omarchy.org](https://plugins.omarchy.org/)). The button depends on the app: on its
+own it only shows "C1 Tune isn't running".
 
 ```bash
 git clone https://github.com/ryankirkman/c1-tune-omarchy.git && cd c1-tune-omarchy
@@ -43,7 +45,20 @@ an app starts using it.
   out and in (or `systemctl --user restart wireplumber`) once for it to apply. It only
   matters if you switch **Microphone** on (see [Microphone](#microphone)).
 
-Without the package (only the udev rule needs sudo):
+### Removing it
+
+```bash
+omarchy plugin remove com.ryankirkman.c1-tune      # the bar button
+sudo pacman -R c1-tune                             # the app, udev rule and audio rule
+rm -rf ~/.config/c1-tune ~/.local/share/c1-tune ~/.config/autostart/c1-tune.desktop    # settings, firmware, login entry
+```
+
+The plugin writes nothing outside its own folder except `$XDG_RUNTIME_DIR/c1-tune.state`
+(a one-line status file, gone at logout), and changes no configuration.
+
+### Without the package
+
+Only the udev rule needs sudo:
 
 ```bash
 make udev            # once: lets you talk to the camera
@@ -280,8 +295,7 @@ Files: settings in `~/.config/c1-tune/settings.json`, firmware in `~/.local/shar
 | `make udev` | Install only the udev rule |
 | `make install-user` / `uninstall-user` | Install under `~/.local` and `~/.config` without sudo, or remove that |
 
-Uninstall with `sudo pacman -R c1-tune`; settings and the cached firmware are the two
-directories above.
+`make uninstall-user` undoes `make install-user`. See [Removing it](#removing-it) for the rest.
 
 ## Limitations
 

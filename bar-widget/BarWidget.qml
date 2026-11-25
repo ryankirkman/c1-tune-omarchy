@@ -4,7 +4,7 @@ import Quickshell.Io
 import qs.Ui
 import qs.Commons
 
-// A webcam icon in the Omarchy bar that shows the camera's state at a glance, as the macOS
+// The Opal C1 in the Omarchy bar. It shows the camera's state at a glance, as the macOS
 // menu bar icon does: normal when the camera is ready, dimmed when it isn't (unplugged,
 // starting, or C1 Tune not running), and the bar's alert colour when something needs doing.
 // A click asks c1-tune to open or close its panel, starting the app first if it isn't running.
@@ -75,12 +75,27 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: "󰖠"
+    // The icon is drawn over the button rather than handed to it: the button scales any
+    // icon so its longest side is the bar's icon size, which would leave this wide, short
+    // shape a quarter smaller than its neighbours. A blank glyph keeps the button's hover,
+    // press and tooltip behaviour.
+    text: " "
     dimmed: root.status !== "ready" && root.status !== "failed"
     active: root.status === "failed"
     tooltipText: root.tooltip
     onPressed: function(b) {
       root.bar.run("c1-tune --panel")
     }
+  }
+
+  // The camera itself (see C1Icon): as tall as the other bar icons, and as wide as the bar's
+  // icon canvas. It takes the button's colour, dimming and press, so it follows the theme
+  // and the alert state like any other bar icon.
+  C1Icon {
+    anchors.centerIn: button
+    iconSize: Style.bar.iconSize * 24 / 18
+    color: button.active && button.useActiveColor ? button.activeColor : button.foreground
+    opacity: button.opacity
+    scale: button.pressScale
   }
 }

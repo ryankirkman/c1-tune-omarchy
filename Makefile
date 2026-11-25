@@ -1,4 +1,4 @@
-VERSION  := 0.1.0
+VERSION  := 0.1.1
 COMMIT   := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 CXX      ?= g++
 # -ffp-contract=off: the crop maths must round exactly as the macOS original's does.
@@ -52,7 +52,7 @@ install-user: all
 	sed 's|^Exec=c1-tune|Exec=$(HOME)/.local/bin/c1-tune|' pkgbuild/c1-tune.desktop > build/c1-tune.desktop
 	install -Dm644 build/c1-tune.desktop $(HOME)/.local/share/applications/c1-tune.desktop
 	install -Dm644 manifest.json $(PLUGIN)/manifest.json
-	install -Dm644 bar-widget/BarWidget.qml $(PLUGIN)/bar-widget/BarWidget.qml
+	install -Dm644 -t $(PLUGIN)/bar-widget bar-widget/BarWidget.qml bar-widget/C1Icon.qml
 	install -Dm644 pkgbuild/opal-c1-no-suspend.conf $(HOME)/.config/wireplumber/wireplumber.conf.d/opal-c1-no-suspend.conf
 
 uninstall-user:

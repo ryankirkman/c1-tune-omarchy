@@ -1,5 +1,5 @@
 pkgname=c1-tune
-pkgver=0.1.0
+pkgver=0.1.1
 pkgrel=1
 pkgdesc='Hardware controls for the Opal C1 webcam: exposure, focus, white balance, zoom'
 arch=('x86_64' 'aarch64')
@@ -36,5 +36,5 @@ package() {
   install -Dm644 "$startdir/c1-tune.desktop" "$pkgdir/usr/share/applications/c1-tune.desktop"
   install -Dm755 scripts/fetch-opal-tuning "$pkgdir/usr/share/c1-tune/fetch-opal-tuning"
   install -Dm644 manifest.json "$pkgdir/usr/share/c1-tune/plugin/manifest.json"
-  install -Dm644 bar-widget/BarWidget.qml "$pkgdir/usr/share/c1-tune/plugin/bar-widget/BarWidget.qml"
+  install -Dm644 -t "$pkgdir/usr/share/c1-tune/plugin/bar-widget" bar-widget/BarWidget.qml bar-widget/C1Icon.qml
 }
