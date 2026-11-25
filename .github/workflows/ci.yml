@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Install build dependencies
         run: pacman -Syu --noconfirm base-devel git jq qt6-base qt6-declarative qt6-wayland layer-shell-qt wayland
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build the app and the panel
         run: make
       - name: Protocol tests
