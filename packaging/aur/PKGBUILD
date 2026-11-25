@@ -12,7 +12,7 @@ optdepends=('qt6-multimedia: live preview in the control panel'
             "python: c1-tune --fetch-tuning (Opal's image tuning)")
 makedepends=('gcc' 'make')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')   # replaced with the release tarball's checksum when a version is tagged
+sha256sums=('57f584e24e1b0237813944e6d3e37a2266785e1b312079967d1e67e5d40262f4')
 
 build() {
   cd "c1-tune-omarchy-$pkgver"
