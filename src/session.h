@@ -77,7 +77,7 @@ private:
     void attach(std::unique_ptr<XLinkConnection> connection, bool freshBoot);
     void waitForAudioProbe();
     void uploadAsset(const Bytes &blob);
-    Bytes call(const std::string &name, const std::vector<MsgPack> &args = {}, const Bytes *raw = nullptr);
+    Bytes call(const std::string &name, const std::vector<MsgPack> &args = {}, const Bytes *raw = nullptr, double timeout = 15);
 
     std::function<void(Status)> onStatus_;
     bool verbose_;

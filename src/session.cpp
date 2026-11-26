@@ -464,7 +464,11 @@ void Session::attach(std::unique_ptr<XLinkConnection> connection, bool freshBoot
     rpcStream_ = *rpc;
 
     if (!freshBoot) {
-        Bytes running = call("isPipelineRunning");
+        // A running pipeline answers this in milliseconds. A camera whose USB link was
+        // re-enumerated under it (its hub reset, say) still answers the ping but never this:
+        // its firmware is alive and its XLink side is stale. Don't sit out the full RPC
+        // timeout before rebooting it; the user is looking at a dead camera meanwhile.
+        Bytes running = call("isPipelineRunning", {}, nullptr, 2);
         if (running.empty() || running.back() != 0xC3) throw StartError{"The camera's pipeline isn't running."};
         controlStream_ = control;
         return;
@@ -556,10 +560,10 @@ void Session::uploadAsset(const Bytes &blob) {
     call("setAssetStorage", {MsgPack::integer(int64_t(*handle)), MsgPack::integer(size)});
 }
 
-Bytes Session::call(const std::string &name, const std::vector<MsgPack> &args, const Bytes *raw) {
+Bytes Session::call(const std::string &name, const std::vector<MsgPack> &args, const Bytes *raw, double timeout) {
     if (!link_) throw StartError{"Camera disconnected."};
     std::optional<Bytes> reply;
-    if (!link_->write(rpcStream_, raw ? *raw : RPC::request(name, args)) || !(reply = link_->read(rpcStream_, 15)))
+    if (!link_->write(rpcStream_, raw ? *raw : RPC::request(name, args)) || !(reply = link_->read(rpcStream_, timeout)))
         throw StartError{"The camera didn't answer " + name + "."};
     if (!RPC::succeeded(*reply)) throw StartError{name + " failed: " + printable(*reply, 4)};
     return *reply;
