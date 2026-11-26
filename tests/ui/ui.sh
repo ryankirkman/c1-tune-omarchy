@@ -25,6 +25,7 @@ open_panel() { [ -z "$(win)" ] && { (c1-tune --panel >/dev/null 2>&1 &); for i i
 at() { read wx wy ww wh <<< "$(win)"; y=$2; [ $y -gt 40 ] && y=$((y + wh - 786)); echo $((wx+$1)) $((wy+y)); }
 click() { [ -z "$(win)" ] && { echo "  (no panel window: click skipped)"; return; }; read x y <<< "$(at $1 $2)"; $P $SW $SH click $x $y; sleep ${3:-0.35}; }
 drag() { [ -z "$(win)" ] && { echo "  (no panel window: drag skipped)"; return; }; read x1 y1 <<< "$(at $1 $2)"; read x2 y2 <<< "$(at $3 $2)"; $P $SW $SH drag $x1 $y1 $x2 $y1; sleep ${4:-0.4}; }
+shot() { read wx wy ww wh <<< "$(win)"; mkdir -p "$ROOT/build/t"; grim -g "$wx,$wy ${ww}x${wh}" "$ROOT/build/t/$1.png"; }   # a picture of the panel
 park() { $P $SW $SH move $((SW/2)) $((SH/2)); }   # get the pointer off whatever it last touched
 get() { c1-tune --status | python3 -c "
 import json,sys
